@@ -1,0 +1,55 @@
+[project]
+name = "voicetotext"
+version = "1.0.0"
+description = "Cross-platform Voice-to-Text application with support for macOS, Linux, and Apple Silicon (MLX)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Aleksandr Mordvinov", email = "contact@scanovich.ai"}
+]
+keywords = ["voice-to-text", "speech-recognition", "whisper", "transcription", "offline", "privacy"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/FUYOH666/VoiceToText"
+Documentation = "https://github.com/FUYOH666/VoiceToText#readme"
+Repository = "https://github.com/FUYOH666/VoiceToText"
+"Bug Tracker" = "https://github.com/FUYOH666/VoiceToText/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.pyright]
+include = ["platforms"]
+exclude = ["**/__pycache__", "**/.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["platforms"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
