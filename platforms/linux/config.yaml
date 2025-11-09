@@ -1,0 +1,77 @@
+# VoiceToText-Linux-F9 Configuration File
+# Настройки системы распознавания речи
+
+# ===== MODEL SETTINGS =====
+# Доступные модели: tiny, base, small, medium, large-v3, large-v3-turbo-f16
+# Рекомендации:
+# - tiny: Быстрая, низкая точность (39MB)
+# - base: Хороший баланс (74MB)
+# - small: Лучшая точность (244MB)
+# - medium: Высокая точность (769MB)
+# - large-v3: Максимальная точность (2.9GB) - для русского языка
+# - large-v3-turbo-f16: Оптимизированная large модель (CPU, 12 потоков)
+
+model: "large-v3-turbo-f16"
+# ⭐ Полный путь к файлу модели (важен для нестандартных моделей)
+model_path: "/home/ai/Документы/dev/VTT-Linux/ggml-large-v3-turbo-f16.bin"
+
+# ===== LANGUAGE SETTINGS =====
+# Доступные языки: ru, en, auto
+# - ru: Принудительно русский язык
+# - en: Принудительно английский язык
+# - auto: Автоопределение языка
+
+language: "ru"
+
+# ===== PERFORMANCE SETTINGS =====
+# Настройки производительности
+
+# Максимальный контекст (0 = без ограничений)
+max_context: 0
+
+# Максимальная длина сегмента (0 = без ограничений)
+max_len: 0
+
+# Использовать GPU (true/false)
+use_gpu: false
+
+# Число потоков CPU для whisper-cli (используется при use_gpu=false)
+cpu_threads: 12
+
+# ===== AUDIO SETTINGS =====
+# Настройки аудио
+
+# Частота дискретизации (Hz)
+sample_rate: 16000
+
+# Каналы (1 = моно, 2 = стерео)
+channels: 1
+
+# Формат аудио
+audio_format: "S16_LE"
+
+# ===== HOTKEY SETTINGS =====
+# Настройки горячей клавиши
+
+# Клавиша для запуска/остановки
+hotkey: "F9"
+
+# ===== FILE PATHS =====
+# Пути к файлам (обычно не нужно менять)
+
+whisper_path: "/home/ai/Projects/whisper.cpp"
+model_base_path: "/home/ai/Projects/whisper.cpp/models"
+temp_dir: "/tmp/whisper-recordings"
+pid_file: "/tmp/whisper-recording.pid"
+
+# ===== ADVANCED SETTINGS =====
+# Продвинутые настройки (для экспертов)
+
+# Дополнительные параметры whisper-cli
+extra_params: "--no-fallback --translate"
+
+# Таймаут записи в секундах (0 = бесконечно)
+recording_timeout: 0
+
+# Уровень логирования: DEBUG, INFO, WARNING, ERROR
+log_level: "INFO"
