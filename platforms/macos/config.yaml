@@ -1,0 +1,67 @@
+# VTTv2 Configuration
+
+app:
+  version: "1.0.0"
+  name: "VTTv2"
+
+# ⭐ Движок транскрипции - whisper.cpp
+transcription:
+  engine: whisper_cpp
+  whisper_cpp:
+    # Путь к бинарнику whisper (относительно проекта или абсолютный)
+    binary_path: "./whisper.cpp/build/bin/whisper-cli"
+    # Путь к модели
+    model_path: "./models/ggml-large-v3.bin"
+    # ⭐ Core ML для M4 Max
+    use_coreml: true
+    # ⭐ Metal для GPU ускорения
+    use_metal: true
+    # Количество потоков (8 performance cores на M4 Max)
+    threads: 8
+    # Язык
+    language: "ru"
+    # Параметры качества
+    temperature: 0.0
+    beam_size: 5
+    best_of: 5
+    patience: 1.0
+    # Дополнительные параметры
+    no_speech_threshold: 0.6
+    compression_ratio_threshold: 2.4
+
+# Аудио
+audio:
+  sample_rate: 16000
+  channels: 1
+  device_index: null  # null = default microphone
+  chunk_size: 1024
+  max_recording_duration: 3600  # 1 час
+
+# UI и управление
+ui:
+  auto_paste_enabled: true
+  auto_paste_method: cgevent  # cgevent или clipboard
+  hotkey: "option+space"      # Option+Space для toggle
+
+menu_bar:
+  icon_idle: "🎤"
+  icon_recording: "🔴"
+  show_status: true
+
+# Постобработка текста (опционально)
+text_processing:
+  enabled: false
+  # Можно добавить позже: punctuation, vocabulary, debloat
+
+# Производительность
+performance:
+  use_neural_engine: true
+  max_concurrent_tasks: 1
+  memory_limit_mb: 16384  # 16GB для M4 Max
+
+# Логирование
+logging:
+  level: INFO
+  format: "%(asctime)s %(levelname)s %(name)s %(message)s"
+  file: null  # null = только консоль
+
