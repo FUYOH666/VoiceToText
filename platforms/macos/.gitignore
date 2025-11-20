@@ -1,0 +1,60 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Модели (большие файлы)
+models/*.bin
+models/*.gguf
+models/*.ggml
+
+# whisper.cpp (используется как submodule или клонируется отдельно)
+whisper.cpp/
+whisper.cpp/.git/
+
+# Временные файлы
+cache/
+tmp/
+temp/
+*.tmp
+# Логи (сохраняем директорию logs/)
+*.log
+!logs/.gitkeep
+logs/*.log
+*.cache
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Пост для vc.ru (личный контент)
+postvc.md
+VC_RU_GUIDELINES.md
+
+# Локальные конфигурации
+.env
+.env.local
+config.local.yaml
+
+# Тестовые файлы
+test_*.wav
+test_*.mp3
+recording_*.wav
+# Референсный текст (можно коммитить, но обычно не нужен в репозитории)
+# test_reference_text.txt
+

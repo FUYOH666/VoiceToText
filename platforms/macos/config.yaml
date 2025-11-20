@@ -1,7 +1,7 @@
 # VTTv2 Configuration
 
 app:
-  version: "1.0.0"
+  version: "1.2.0"
   name: "VTTv2"
 
 # ⭐ Движок транскрипции - whisper.cpp
@@ -26,7 +26,11 @@ transcription:
     best_of: 5
     patience: 1.0
     # Дополнительные параметры
-    no_speech_threshold: 0.6
+    # ⭐ no_speech_threshold: порог для определения "нет речи" (0.0-1.0)
+    # Меньше значение = более чувствительная транскрипция (может захватывать тихую речь)
+    # Для длинных записей рекомендуется 0.3-0.4 вместо 0.6
+    no_speech_threshold: 0.3
+    # compression_ratio_threshold: порог компрессии для фильтрации повторов
     compression_ratio_threshold: 2.4
 
 # Аудио
@@ -61,7 +65,7 @@ performance:
 
 # Логирование
 logging:
-  level: INFO
+  level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
   format: "%(asctime)s %(levelname)s %(name)s %(message)s"
-  file: null  # null = только консоль
+  file: "./logs/vtt2.log"  # Путь к файлу логов (null = только консоль)
 
