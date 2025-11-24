@@ -7,13 +7,13 @@ Voice-to-Text application optimized for Apple Silicon using MLX Whisper framewor
 ## 🚀 Быстрый запуск
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py
+cd platforms/mlx && uv run python src/src/main.py
 ```
 
 Для health check:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py --health
+cd platforms/mlx && uv run python src/src/main.py --health
 ```
 
 ## Features
@@ -45,14 +45,14 @@ cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/mai
 Using `uv` (recommended):
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4
+cd platforms/mlx
 uv sync
 ```
 
 Or using `pip`:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4
+cd platforms/mlx
 pip install -r requirements.txt
 ```
 
@@ -61,13 +61,15 @@ pip install -r requirements.txt
 Quick start:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py
+cd platforms/mlx
+uv run python src/src/main.py
 ```
 
 Health check:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py --health
+cd platforms/mlx
+uv run python src/src/main.py --health
 ```
 
 ## Configuration
@@ -127,7 +129,8 @@ performance:
 Run transcription speed test:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python test_transcription_speed.py
+cd platforms/mlx
+uv run python test_transcription_speed.py
 ```
 
 ## Optimizations
@@ -153,7 +156,8 @@ cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python test_transc
 
 2. **Проверьте логи:**
    ```bash
-   cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py
+   cd platforms/mlx
+   uv run python src/src/main.py
    ```
    Ищите сообщения:
    - `✅ Горячие клавиши активированы` - все хорошо
@@ -162,7 +166,8 @@ cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python test_transc
 
 3. **Проверьте разрешения:**
    ```bash
-   cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py --health
+   cd platforms/mlx
+   uv run python src/src/main.py --health
    ```
 
 ### Автовставка не работает
@@ -191,13 +196,13 @@ For detailed documentation, see the original [VoiceToText-MLX-M1-8Gb repository]
 ## 🚀 Быстрый запуск
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py
+cd platforms/mlx && uv run python src/src/main.py
 ```
 
 Для health check:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py --health
+cd platforms/mlx && uv run python src/src/main.py --health
 ```
 
 ## Возможности
@@ -229,14 +234,14 @@ cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/mai
 Используя `uv` (рекомендуется):
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4
+cd platforms/mlx
 uv sync
 ```
 
 Или используя `pip`:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4
+cd platforms/mlx
 pip install -r requirements.txt
 ```
 
@@ -245,13 +250,15 @@ pip install -r requirements.txt
 Быстрый запуск:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py
+cd platforms/mlx
+uv run python src/src/main.py
 ```
 
 Health check:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py --health
+cd platforms/mlx
+uv run python src/src/main.py --health
 ```
 
 ## Конфигурация
@@ -308,7 +315,8 @@ performance:
 Запустите тест скорости транскрипции:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python test_transcription_speed.py
+cd platforms/mlx
+uv run python test_transcription_speed.py
 ```
 
 ## Оптимизации
