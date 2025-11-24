@@ -1,11 +1,13 @@
 """
 Запись аудио с микрофона для VTTv2
+Оптимизировано для длинных записей (15-45 минут и более)
 """
 import logging
 import numpy as np
 import sounddevice as sd
 from typing import Optional, List
 from queue import Queue
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +34,10 @@ class AudioRecorder:
         self.is_recording = False
         self.audio_queue: Queue = Queue()
         self.recorded_audio: List[np.ndarray] = []
+        self.recording_start_time: Optional[float] = None
+        self.last_progress_log_time: Optional[float] = None
         
-        logger.info(f"AudioRecorder инициализирован (sample_rate={self.sample_rate}, channels={self.channels})")
+        logger.info(f"AudioRecorder инициализирован (sample_rate={self.sample_rate}, channels={self.channels}, max_duration={self.max_duration}s)")
     
     def start_recording(self):
         """Начало записи аудио"""
@@ -44,6 +48,8 @@ class AudioRecorder:
         self.is_recording = True
         self.recorded_audio = []
         self.audio_queue = Queue()
+        self.recording_start_time = time.time()
+        self.last_progress_log_time = self.recording_start_time
         
         def audio_callback(indata, frames, time_info, status):
             """Callback для записи аудио"""
@@ -51,6 +57,20 @@ class AudioRecorder:
                 logger.warning(f"Статус записи: {status}")
             
             if self.is_recording:
+                # Проверка максимальной длительности
+                current_time = time.time()
+                elapsed = current_time - self.recording_start_time
+                
+                if elapsed >= self.max_duration:
+                    logger.warning(f"Достигнута максимальная длительность записи ({self.max_duration}s), останавливаем запись")
+                    self.is_recording = False
+                    return
+                
+                # Логирование прогресса для длинных записей (каждые 30 секунд)
+                if elapsed - (self.last_progress_log_time - self.recording_start_time) >= 30:
+                    logger.info(f"Запись продолжается: {elapsed:.0f}s / {self.max_duration}s")
+                    self.last_progress_log_time = current_time
+                
                 # Конвертация в numpy array
                 audio_data = indata.copy()
                 self.audio_queue.put(audio_data)
@@ -102,6 +122,10 @@ class AudioRecorder:
                 return None
             
             # Объединение всех чанков
+            # Для длинных записей это может занять время, логируем прогресс
+            if len(audio_chunks) > 100:  # Большое количество чанков
+                logger.info(f"Объединение {len(audio_chunks)} чанков аудио...")
+            
             audio_data = np.concatenate(audio_chunks, axis=0)
             
             # Конвертация в моно (если stereo)
@@ -109,7 +133,12 @@ class AudioRecorder:
                 audio_data = np.mean(audio_data, axis=1)
             
             duration = len(audio_data) / self.sample_rate
-            logger.info(f"Запись остановлена: {duration:.2f} секунд, {len(audio_data)} сэмплов")
+            size_mb = (audio_data.nbytes / (1024 * 1024))
+            
+            # Очистка промежуточных данных для экономии памяти
+            del audio_chunks
+            
+            logger.info(f"Запись остановлена: {duration:.2f} секунд ({duration/60:.1f} минут), {len(audio_data)} сэмплов, ~{size_mb:.1f} MB")
             
             return audio_data.astype(np.float32)
             
@@ -125,4 +154,6 @@ class AudioRecorder:
         
         self.is_recording = False
         self.recorded_audio = []
+        self.recording_start_time = None
+        self.last_progress_log_time = None
 

@@ -16,12 +16,16 @@ logger = logging.getLogger(__name__)
 class MLXWhisperConfig(BaseModel):
     """Конфигурация MLX Whisper"""
     model_name: str = Field("mlx-community/whisper-medium", description="Название модели MLX (например, mlx-community/whisper-medium)")
-    language: str = Field("ru", description="Язык транскрипции")
+    language: Optional[str] = Field("auto", description="Язык транскрипции: 'auto' для автоопределения, или код языка ('ru', 'en', 'zh', 'ja' и т.д.)")
     temperature: float = Field(0.0, ge=0.0, le=1.0, description="Temperature")
     beam_size: int = Field(5, ge=1, description="Beam size")
     best_of: int = Field(5, ge=1, description="Best of")
     no_speech_threshold: float = Field(0.6, ge=0.0, le=1.0, description="No speech threshold")
     compression_ratio_threshold: float = Field(2.4, ge=0.0, description="Compression ratio threshold")
+    # Параметры для обработки длинных записей
+    chunk_size_seconds: int = Field(30, ge=10, le=300, description="Размер чанка для обработки длинных записей (секунды)")
+    chunk_overlap_seconds: int = Field(2, ge=0, le=10, description="Перекрытие между чанками (секунды)")
+    batch_size: int = Field(6, ge=1, le=24, description="Размер батча для параллельной обработки чанков")
 
 
 class WhisperCppConfig(BaseModel):
@@ -90,6 +94,9 @@ class PerformanceConfig(BaseModel):
     use_neural_engine: bool = Field(True, description="Использовать Neural Engine")
     max_concurrent_tasks: int = Field(1, ge=1, description="Максимум одновременных задач")
     memory_limit_mb: int = Field(16384, ge=1024, description="Лимит памяти (MB)")
+    auto_cleanup_enabled: bool = Field(True, description="Автоматическая очистка памяти")
+    cleanup_threshold_percent: int = Field(75, ge=50, le=95, description="Порог для запуска очистки (% от лимита)")
+    periodic_cleanup_interval: int = Field(10, ge=1, description="Очистка памяти каждые N транскрипций")
 
 
 class LoggingConfig(BaseModel):

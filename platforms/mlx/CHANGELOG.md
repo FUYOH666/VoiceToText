@@ -1,0 +1,59 @@
+# Changelog
+
+## [1.0.1] - 2025-11-24
+
+### Fixed
+- 🔧 **Fixed pynput GlobalHotKeys compatibility**: Updated hotkey handler to accept `injected` argument required by pynput 1.8.0+
+- 🔧 **Improved error handling**: Added better exception handling for pynput compatibility issues
+- 🔧 **Fallback mechanism**: Enhanced fallback to regular Listener when GlobalHotKeys fails
+
+## [1.0.0] - 2025-11-23
+
+### Added
+- 🚀 **M4 Max optimization**: Optimized for MacBook Pro M4 Max with 128GB RAM
+- 🌍 **Auto language detection**: Automatically detects language (Russian, Chinese, English, Japanese, etc.)
+- 📦 **Long recordings support**: Optimized for 15-45 minute recordings with chunked processing
+- ⚙️ **Batch processing**: Utilizes all 40 GPU cores on M4 Max (batch_size=6)
+- 🔄 **24/7 operation**: Automatic memory management and error recovery
+- 💾 **Memory Manager**: Automatic memory cleanup and monitoring
+- 🧹 **Periodic cleanup**: Automatic memory cleanup every 10 transcriptions
+- 📊 **Speed testing**: Added `test_transcription_speed.py` for performance testing
+- 🎯 **Large-v3 model**: Default model changed to `whisper-large-v3-mlx` for maximum quality
+
+### Performance
+- **Speed**: ~42x real-time (tested on M4 Max)
+  - 5-minute recording: ~6 seconds
+  - 15-minute recording: ~20 seconds
+  - 45-minute recording: ~1 minute
+- **Memory**: Optimized memory usage with automatic cleanup
+- **Stability**: Error recovery and automatic component reinitialization
+
+### Changed
+- Default model: `mlx-community/whisper-medium` → `mlx-community/whisper-large-v3-mlx`
+- Default language: `"ru"` → `"auto"` (automatic detection)
+- Memory limit: Increased to 16GB for M4 Max
+- Chunk size: 30 seconds with 2 seconds overlap
+- Batch size: 6 for optimal GPU utilization
+
+### Configuration
+- Added `performance.auto_cleanup_enabled` (default: true)
+- Added `performance.cleanup_threshold_percent` (default: 75)
+- Added `performance.periodic_cleanup_interval` (default: 10)
+- Added `transcription.mlx_whisper.language` (default: "auto")
+- Added `transcription.mlx_whisper.chunk_size_seconds` (default: 30)
+- Added `transcription.mlx_whisper.chunk_overlap_seconds` (default: 2)
+- Added `transcription.mlx_whisper.batch_size` (default: 6)
+
+### Fixed
+- Fixed auto-paste functionality (save active app before recording)
+- Fixed health check command (exclude "engine" from status check)
+- Improved error handling and recovery
+- Reduced warning noise (changed some warnings to debug level)
+
+### Documentation
+- Updated README with M4 Max optimizations
+- Added 24/7 operation guide
+- Added speed testing instructions
+- Added memory management documentation
+- Updated configuration examples
+

@@ -97,7 +97,10 @@ class TextInjector:
                         logger.info(f"✅ Приложение успешно активировано: {self.saved_app}")
                         return True
                     else:
-                        logger.warning(f"⚠️ Приложение не активировано. Активно: {active_app.bundleIdentifier() if active_app else 'None'}")
+                        # Это не критично - пользователь мог переключиться на другое приложение
+                        # Вставка все равно произойдет в активное приложение
+                        logger.debug(f"ℹ️ Не удалось активировать сохраненное приложение. Активно: {active_app.bundleIdentifier() if active_app else 'None'}")
+                        logger.debug(f"ℹ️ Вставка будет выполнена в текущее активное приложение")
                         return False
             logger.warning(f"Приложение {self.saved_app} не найдено среди запущенных")
             return False
@@ -161,8 +164,9 @@ class TextInjector:
             app_activated = False
             if self.saved_app:
                 app_activated = self.restore_active_app()
-                if not app_activated:
-                    logger.warning("Не удалось активировать приложение, пробуем вставить все равно")
+            if not app_activated:
+                # Это нормально - вставка произойдет в текущее активное приложение
+                logger.debug("ℹ️ Не удалось активировать сохраненное приложение, вставляем в текущее активное")
             
             # Небольшая задержка для гарантии активации
             time.sleep(0.3)

@@ -18,6 +18,7 @@ from audio.processor import AudioProcessor
 from transcription.engine import TranscriptionEngineWrapper
 from system.text_injector import TextInjector
 from system.hotkeys import HotkeyManager
+from utils.memory_manager import MemoryManager
 
 # Для выполнения в главном потоке
 try:
@@ -51,6 +52,18 @@ class VTT2App(rumps.App):
         self.is_recording = False
         self.is_processing = False
         self.last_text = ""
+        
+        # Инициализация менеджера памяти для долгой работы
+        cleanup_threshold = int(
+            config.performance.memory_limit_mb * 
+            (config.performance.cleanup_threshold_percent / 100)
+        )
+        self.memory_manager = MemoryManager(
+            memory_limit_mb=config.performance.memory_limit_mb,
+            cleanup_threshold_mb=cleanup_threshold
+        )
+        self.periodic_cleanup_interval = config.performance.periodic_cleanup_interval
+        self.memory_manager.log_memory_usage("при старте")
         
         # Инициализация компонентов
         self._init_components()
@@ -122,6 +135,9 @@ class VTT2App(rumps.App):
             rumps.MenuItem("📋 Копировать текст", callback=self.copy_text),
             rumps.MenuItem("📝 Показать текст", callback=self.show_text),
             rumps.separator,
+            rumps.MenuItem("🧹 Очистить память", callback=self.cleanup_memory),
+            rumps.MenuItem("💾 Статус памяти", callback=self.show_memory_status),
+            rumps.separator,
             rumps.MenuItem("ℹ️ О программе", callback=self.show_about),
             rumps.MenuItem("🔍 Health Check", callback=self.health_check),
             rumps.separator,
@@ -140,12 +156,17 @@ class VTT2App(rumps.App):
     
     def _on_hotkey_pressed(self):
         """Обработка нажатия горячей клавиши"""
+        self.logger.info("🔥 Горячая клавиша нажата!")
+        
         if self.is_processing:
+            self.logger.warning("⚠️ Обработка уже идет, игнорируем нажатие")
             return
         
         if self.is_recording:
+            self.logger.info("⏹️ Останавливаем запись...")
             self.stop_recording()
         else:
+            self.logger.info("▶️ Начинаем запись...")
             self.start_recording()
     
     @rumps.clicked("🎤 Начать запись")
@@ -162,12 +183,19 @@ class VTT2App(rumps.App):
             return
         
         try:
+            # Сохраняем активное приложение ПЕРЕД началом записи (для автовставки)
+            if self.config.ui.auto_paste_enabled:
+                self.logger.debug("Сохранение активного приложения перед началом записи...")
+                saved = self.text_injector.save_active_app()
+                if not saved:
+                    self.logger.warning("⚠️ Не удалось сохранить активное приложение, автовставка может не работать")
+            
             self.is_recording = True
             self.title = self.config.menu_bar.icon_recording
             self._update_status("ЗАПИСЬ")
             
             self.audio_recorder.start_recording()
-            self.logger.info("Запись начата")
+            self.logger.info("✅ Запись начата")
             
         except Exception as e:
             self.logger.error(f"Ошибка начала записи: {e}")
@@ -184,13 +212,6 @@ class VTT2App(rumps.App):
         try:
             self.is_recording = False
             self._update_status("Обработка...")
-            
-            # Сохраняем активное приложение перед обработкой (для автовставки)
-            if self.config.ui.auto_paste_enabled:
-                self.logger.debug("Сохранение активного приложения перед транскрипцией...")
-                saved = self.text_injector.save_active_app()
-                if not saved:
-                    self.logger.warning("⚠️ Не удалось сохранить активное приложение, автовставка может не работать")
             
             # Остановка записи
             audio_data = self.audio_recorder.stop_recording()
@@ -219,11 +240,31 @@ class VTT2App(rumps.App):
             self.is_processing = True
             self._update_status("Транскрипция...")
             
+            # Мониторинг памяти перед транскрипцией
+            self.memory_manager.monitor_and_cleanup_if_needed("перед транскрипцией")
+            
             # Подготовка аудио
             audio_data = self.audio_processor.prepare_for_whisper(audio_data)
             
             # Транскрипция
             text = self.transcription_engine.transcribe(audio_data)
+            
+            # Очистка памяти после транскрипции
+            # Освобождаем ссылку на аудио данные
+            del audio_data
+            
+            # Периодическая очистка памяти
+            if not hasattr(self, '_transcription_count'):
+                self._transcription_count = 0
+            self._transcription_count += 1
+            
+            if self.config.performance.auto_cleanup_enabled:
+                if self._transcription_count % self.periodic_cleanup_interval == 0:
+                    self.logger.info(f"Периодическая очистка памяти после {self._transcription_count} транскрипций")
+                    self.memory_manager.cleanup_memory()
+                else:
+                    # Легкая очистка после каждой транскрипции (проверка порога)
+                    self.memory_manager.monitor_and_cleanup_if_needed("после транскрипции")
             
             if not text or not text.strip():
                 self.logger.warning("Пустой результат транскрипции")
@@ -262,6 +303,21 @@ class VTT2App(rumps.App):
             
         except Exception as e:
             self.logger.error(f"Ошибка обработки аудио: {e}")
+            import traceback
+            self.logger.debug(traceback.format_exc())
+            
+            # Попытка восстановления: очистка памяти и повторная инициализация компонентов
+            try:
+                self.logger.info("Попытка восстановления после ошибки...")
+                self.memory_manager.cleanup_memory()
+                
+                # Переинициализация транскрипционного движка
+                from transcription.engine import TranscriptionEngineWrapper
+                self.transcription_engine = TranscriptionEngineWrapper(self.config)
+                self.logger.info("✅ Компоненты переинициализированы")
+            except Exception as recovery_error:
+                self.logger.error(f"Ошибка восстановления: {recovery_error}")
+            
             self._finalize_processing(None)
     
     def _finalize_processing(self, text):
@@ -349,12 +405,60 @@ class VTT2App(rumps.App):
         status_text = "\n".join(checks)
         rumps.alert("Health Check", status_text)
     
+    @rumps.clicked("🧹 Очистить память")
+    def cleanup_memory(self, _):
+        """Очистка памяти"""
+        try:
+            self.memory_manager.log_memory_usage("до очистки")
+            result = self.memory_manager.cleanup_memory()
+            self.memory_manager.log_memory_usage("после очистки")
+            
+            if result.get('before') and result.get('after'):
+                freed = result['before'].get('rss_mb', 0) - result['after'].get('rss_mb', 0)
+                rumps.notification("VTTv2", "Память очищена", f"Освобождено ~{freed:.0f}MB")
+            else:
+                rumps.notification("VTTv2", "Память очищена", "")
+        except Exception as e:
+            self.logger.error(f"Ошибка очистки памяти: {e}")
+            rumps.alert("Ошибка", f"Не удалось очистить память: {e}")
+    
+    @rumps.clicked("💾 Статус памяти")
+    def show_memory_status(self, _):
+        """Показ статуса памяти"""
+        try:
+            mem_info = self.memory_manager.get_memory_usage()
+            if mem_info:
+                status = (
+                    f"RSS: {mem_info['rss_mb']:.0f}MB\n"
+                    f"Система: {mem_info['system_percent']:.1f}%\n"
+                    f"Свободно: {mem_info['system_available_gb']:.1f}GB"
+                )
+                rumps.alert("Статус памяти", status)
+            else:
+                rumps.alert("Статус памяти", "Не удалось получить информацию")
+        except Exception as e:
+            self.logger.error(f"Ошибка получения статуса памяти: {e}")
+            rumps.alert("Ошибка", f"Не удалось получить статус: {e}")
+    
     @rumps.clicked("❌ Выход")
     def quit_app(self, _):
         """Выход из приложения"""
-        if hasattr(self, 'hotkey_manager'):
-            self.hotkey_manager.stop()
-        rumps.quit_application()
+        try:
+            # Очистка перед выходом
+            self.logger.info("Очистка перед выходом...")
+            if hasattr(self, 'memory_manager'):
+                self.memory_manager.cleanup_memory()
+                self.memory_manager.cleanup_temp_files()
+            
+            if hasattr(self, 'hotkey_manager'):
+                self.hotkey_manager.stop()
+            
+            if hasattr(self, 'audio_recorder'):
+                self.audio_recorder.cleanup()
+        except Exception as e:
+            self.logger.error(f"Ошибка при выходе: {e}")
+        finally:
+            rumps.quit_application()
 
 
 def health_check_command(config_path: str = "config.yaml"):
@@ -427,7 +531,10 @@ def health_check_command(config_path: str = "config.yaml"):
         print("   1. Системные настройки > Конфиденциальность > Управление компьютером")
         print("   2. Добавьте Terminal (или приложение) в список")
     
-    all_ok = all("✅" in str(status) for status in checks.values())
+    # Проверяем только те ключи, которые должны быть ✅ (исключаем "engine" - это просто название)
+    check_keys = [k for k in checks.keys() if k != "engine"]
+    all_ok = all("✅" in str(checks[k]) for k in check_keys)
+    
     if all_ok:
         print("\n✅ Все проверки пройдены - готово к запуску!")
         return 0

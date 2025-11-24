@@ -1,0 +1,87 @@
+[project]
+name = "vtt-mlx-m4"
+version = "1.0.1"
+description = "Voice-to-Text для macOS с MLX Whisper, оптимизировано для M4 Max и длинных записей"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Aleksandr Mordvinov", email = "contact@scanovich.ai"}
+]
+keywords = ["voice-to-text", "speech-recognition", "whisper", "mlx", "transcription", "offline", "apple-silicon"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    # MLX для Apple Silicon
+    "mlx>=0.19.0",
+    "mlx-whisper>=0.1.0",
+    # Основные зависимости
+    "numpy>=2.0.0,<3.0.0",
+    "pydantic>=2.0.0,<3.0.0",
+    "pyyaml>=6.0.0",
+    # Аудио
+    "sounddevice>=0.5.0",
+    "soundfile>=0.12.0",
+    # UI и системные
+    "rumps>=0.4.0",
+    "pynput>=1.8.0",
+    "pyperclip>=1.8.0",
+    "pyobjc>=12.0",
+    "psutil>=5.9.0",  # Мониторинг памяти для долгой работы
+    # Утилиты
+    "coloredlogs>=15.0.0",
+    "psutil>=7.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.0",
+    "ruff>=0.14.0",
+    "pyright>=1.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/FUYOH666/VoiceToText"
+Repository = "https://github.com/FUYOH666/VoiceToText"
+"Bug Tracker" = "https://github.com/FUYOH666/VoiceToText/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.pyright]
+include = ["src"]
+exclude = ["**/__pycache__", "**/.*", "tests", "temp_repo"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
