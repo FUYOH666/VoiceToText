@@ -1,0 +1,87 @@
+# VTTv2 Configuration
+
+app:
+  version: "1.0.0"
+  name: "VTTv2"
+
+# ⭐ Движок транскрипции - MLX Whisper (оптимизировано для Apple Silicon)
+transcription:
+  engine: mlx_whisper  # mlx_whisper или whisper_cpp
+  mlx_whisper:
+    # Модель MLX (автоматически скачивается при первом использовании)
+    # Доступные модели: mlx-community/whisper-tiny-mlx, whisper-small-mlx, whisper-medium-mlx, whisper-large-v3-mlx
+    model_name: "mlx-community/whisper-large-v3-mlx"  # Оптимально для M4 Max с 128GB RAM - максимальное качество
+    language: "auto"  # "auto" для автоопределения языка, или код языка: "ru", "en", "zh" (китайский), "ja" (японский) и т.д.
+    temperature: 0.0
+    beam_size: 5
+    best_of: 5
+    no_speech_threshold: 0.6
+    compression_ratio_threshold: 2.4
+    # Параметры для обработки длинных записей (15-45 минут)
+    chunk_size_seconds: 30  # Размер чанка для обработки (секунды)
+    chunk_overlap_seconds: 2  # Перекрытие между чанками для плавного соединения текста
+    batch_size: 6  # Размер батча для параллельной обработки (оптимально для large-v3 на M4 Max)
+  whisper_cpp:
+    # Путь к бинарнику whisper (относительно проекта или абсолютный)
+    # Только для fallback - MLX Whisper используется по умолчанию
+    binary_path: "./whisper.cpp/build/bin/whisper-cli"
+    # Путь к модели (Medium Q5_0 квантизация - оптимально для M1 с 8GB RAM)
+    model_path: "./models/ggml-medium-q5_0.bin"
+    # ⭐ Core ML для M1 (Neural Engine) - опционально для whisper.cpp fallback
+    # Metal GPU ускорение работает и без Core ML
+    use_coreml: false
+    # ⭐ Metal для GPU ускорения
+    use_metal: true
+    # Количество потоков (4 для M1 - оптимально для баланса производительности и памяти)
+    threads: 4
+    # Язык
+    language: "ru"
+    # Параметры качества
+    temperature: 0.0
+    beam_size: 5
+    best_of: 5
+    patience: 1.0
+    # Дополнительные параметры
+    no_speech_threshold: 0.6
+    compression_ratio_threshold: 2.4
+
+# Аудио
+audio:
+  sample_rate: 16000
+  channels: 1
+  device_index: null  # null = default microphone
+  chunk_size: 1024
+  max_recording_duration: 7200  # 2 часа (поддержка длинных записей 15-45 минут и более)
+
+# UI и управление
+ui:
+  auto_paste_enabled: true
+  auto_paste_method: cgevent  # cgevent или clipboard
+  hotkey: "option+space"      # Option+Space для toggle
+
+menu_bar:
+  icon_idle: "🎤"
+  icon_recording: "🔴"
+  show_status: true
+
+# Постобработка текста (опционально)
+text_processing:
+  enabled: false
+  # Можно добавить позже: punctuation, vocabulary, debloat
+
+# Производительность
+performance:
+  use_neural_engine: true
+  max_concurrent_tasks: 1
+  memory_limit_mb: 16384  # 16GB для M4 Max (128GB RAM) - достаточно для large-v3 и длинных записей
+  # Автоматическая очистка памяти для долгой работы (24/7)
+  auto_cleanup_enabled: true  # Автоматическая очистка при превышении порога памяти
+  cleanup_threshold_percent: 75  # Порог для запуска очистки (75% от лимита)
+  periodic_cleanup_interval: 10  # Очистка памяти каждые N транскрипций
+
+# Логирование
+logging:
+  level: INFO  # INFO для нормальной работы, DEBUG для диагностики
+  format: "%(asctime)s %(levelname)s %(name)s %(message)s"
+  file: null  # null = только консоль
+
