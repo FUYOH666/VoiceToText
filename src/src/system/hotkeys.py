@@ -10,6 +10,47 @@ from typing import Optional, Callable
 logger = logging.getLogger(__name__)
 
 
+class SafeGlobalHotKeys(keyboard.GlobalHotKeys):
+    """
+    Безопасная обертка над GlobalHotKeys, которая корректно обрабатывает
+    случаи, когда pynput не передает injected параметр для специальных клавиш.
+    
+    Проблема: В pynput/keyboard/_darwin.py для специальных клавиш (например, space)
+    вызывается on_press без injected параметра, но GlobalHotKeys._on_press()
+    требует два аргумента (key, injected).
+    """
+    
+    def _on_press(self, key, injected=None):
+        """
+        Переопределенный метод обработки нажатия клавиши.
+        
+        Args:
+            key: Клавиша
+            injected: Флаг инжектированного события (может быть None для специальных клавиш)
+        """
+        # Если injected не передан (None), считаем что событие не инжектировано
+        if injected is None:
+            injected = False
+        
+        # Вызываем родительский метод с правильными аргументами
+        super()._on_press(key, injected)
+    
+    def _on_release(self, key, injected=None):
+        """
+        Переопределенный метод обработки отпускания клавиши.
+        
+        Args:
+            key: Клавиша
+            injected: Флаг инжектированного события (может быть None для специальных клавиш)
+        """
+        # Если injected не передан (None), считаем что событие не инжектировано
+        if injected is None:
+            injected = False
+        
+        # Вызываем родительский метод с правильными аргументами
+        super()._on_release(key, injected)
+
+
 class HotkeyManager:
     """Управление глобальными горячими клавишами"""
     
@@ -108,11 +149,9 @@ class HotkeyManager:
             def for_canonical(f):
                 return lambda k: f(self.listener.canonical(k))
             
-            # Упрощенная версия через keyboard.GlobalHotKeys
+            # Используем SafeGlobalHotKeys для корректной обработки injected параметра
             # pynput поддерживает глобальные горячие клавиши через keyboard.GlobalHotKeys
             try:
-                from pynput.keyboard import GlobalHotKeys
-                
                 # Парсинг комбинации для правильного формата
                 # pynput использует формат '<modifier>+<key>'
                 hotkey_format = self._format_hotkey_for_pynput()
@@ -138,53 +177,24 @@ class HotkeyManager:
                     hotkey_format: safe_on_activate,
                 }
                 
-                # Создание GlobalHotKeys
-                # Перехватываем исключения из внутреннего потока через sys.excepthook
-                import sys
+                # Создание SafeGlobalHotKeys (исправляет проблему с injected параметром)
+                self.listener = SafeGlobalHotKeys(hotkey_mapping)
+                self.listener.start()
+                self.is_running = True
                 
-                original_excepthook = sys.excepthook
-                error_occurred = threading.Event()
-                error_info = {'error': None}
+                # Даем время на инициализацию
+                import time
+                time.sleep(0.1)
                 
-                def custom_excepthook(exc_type, exc_value, exc_traceback):
-                    """Перехват исключений из потока listener"""
-                    if exc_type == TypeError and 'injected' in str(exc_value):
-                        # Это известная проблема совместимости pynput
-                        logger.warning(f"Обнаружена проблема совместимости pynput: {exc_value}")
-                        error_info['error'] = exc_value
-                        error_occurred.set()
-                        # Не вызываем original_excepthook для этой ошибки
-                        return
-                    # Для других ошибок вызываем стандартный обработчик
-                    original_excepthook(exc_type, exc_value, exc_traceback)
-                
-                sys.excepthook = custom_excepthook
-                
-                try:
-                    self.listener = GlobalHotKeys(hotkey_mapping)
-                    self.listener.start()
-                    self.is_running = True
-                    
-                    # Даем время на инициализацию и проверку ошибок
-                    import time
-                    time.sleep(0.1)
-                    
-                    # Проверяем наличие ошибок совместимости
-                    if error_occurred.is_set():
-                        raise TypeError(error_info.get('error', 'Проблема совместимости с pynput'))
-                    
-                    # Проверяем, что listener действительно работает
-                    if self.listener.running:
-                        logger.info("✅ Горячие клавиши активированы")
-                    else:
-                        logger.warning("⚠️ Слушатель запущен, но может не работать без разрешения Accessibility")
-                        logger.warning("⚠️ Убедитесь, что приложение добавлено в Системные настройки > Конфиденциальность > Управление компьютером")
-                finally:
-                    # Восстанавливаем стандартный обработчик исключений
-                    sys.excepthook = original_excepthook
+                # Проверяем, что listener действительно работает
+                if self.listener.running:
+                    logger.info("✅ Горячие клавиши активированы")
+                else:
+                    logger.warning("⚠️ Слушатель запущен, но может не работать без разрешения Accessibility")
+                    logger.warning("⚠️ Убедитесь, что приложение добавлено в Системные настройки > Конфиденциальность > Управление компьютером")
                 
             except (TypeError, AttributeError, RuntimeError) as e:
-                # Обработка ошибок совместимости с pynput (например, проблема с injected аргументом)
+                # Обработка ошибок совместимости с pynput
                 logger.warning(f"Проблема совместимости с GlobalHotKeys: {e}")
                 logger.debug("Используем fallback метод через обычный Listener")
                 # Fallback на обычный listener (не будет работать глобально)
@@ -200,7 +210,7 @@ class HotkeyManager:
                     logger.error(f"Ошибка fallback метода: {fallback_error}")
                     raise
             except Exception as e:
-                logger.error(f"Ошибка создания GlobalHotKeys: {e}")
+                logger.error(f"Ошибка создания SafeGlobalHotKeys: {e}")
                 import traceback
                 logger.debug(traceback.format_exc())
                 logger.error("❌ Не удалось зарегистрировать глобальные горячие клавиши")

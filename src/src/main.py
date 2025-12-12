@@ -222,12 +222,17 @@ class VTT2App(rumps.App):
                 self._update_status("Готов")
                 return
             
+            duration_seconds = len(audio_data) / self.config.audio.sample_rate
+            self.logger.info(f"📊 Получено аудио: {len(audio_data)} сэмплов ({duration_seconds:.1f} секунд, {duration_seconds/60:.1f} минут)")
+            
             # Обработка в отдельном потоке
+            self.logger.info("🔄 Запуск потока обработки аудио...")
             threading.Thread(
                 target=self._process_audio,
                 args=(audio_data,),
                 daemon=True
             ).start()
+            self.logger.info("✅ Поток обработки запущен")
             
         except Exception as e:
             self.logger.error(f"Ошибка остановки записи: {e}")
@@ -237,17 +242,27 @@ class VTT2App(rumps.App):
     def _process_audio(self, audio_data):
         """Обработка аудио в отдельном потоке"""
         try:
+            self.logger.info("🎯 Начало обработки аудио в потоке")
             self.is_processing = True
             self._update_status("Транскрипция...")
+            
+            duration_seconds = len(audio_data) / self.config.audio.sample_rate
+            self.logger.info(f"📊 Подготовка к транскрипции: {duration_seconds:.1f} секунд ({duration_seconds/60:.1f} минут)")
             
             # Мониторинг памяти перед транскрипцией
             self.memory_manager.monitor_and_cleanup_if_needed("перед транскрипцией")
             
             # Подготовка аудио
+            self.logger.info("🔧 Подготовка аудио данных...")
             audio_data = self.audio_processor.prepare_for_whisper(audio_data)
+            self.logger.info(f"✅ Аудио подготовлено: {len(audio_data)} сэмплов")
             
             # Транскрипция
+            self.logger.info("🎤 Начало транскрипции...")
+            start_time = time.time()
             text = self.transcription_engine.transcribe(audio_data)
+            elapsed = time.time() - start_time
+            self.logger.info(f"✅ Транскрипция завершена за {elapsed:.2f} секунд: {len(text)} символов")
             
             # Очистка памяти после транскрипции
             # Освобождаем ссылку на аудио данные
