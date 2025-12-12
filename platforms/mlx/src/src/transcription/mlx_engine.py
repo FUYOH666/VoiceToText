@@ -240,21 +240,26 @@ class MLXWhisperTranscriber:
             RuntimeError: При ошибке транскрипции
         """
         start_time = time.time()
+        duration_seconds = len(audio_data) / self.sample_rate
+        logger.info(f"📦 Начало обработки длинной записи: {len(audio_data)} сэмплов ({duration_seconds:.1f} секунд, {duration_seconds/60:.1f} минут)")
         
         try:
             # Подготовка аудио
+            logger.info("🔧 Подготовка аудио данных...")
             if audio_data.dtype != np.float32:
                 audio_data = audio_data.astype(np.float32)
             
             # Нормализация аудио
+            logger.info("📊 Нормализация аудио...")
             max_val = max(abs(audio_data.max()), abs(audio_data.min()))
             if max_val > 1.0:
                 audio_data = audio_data / max_val
             
             # Разбиение на чанки
+            logger.info(f"✂️ Разбиение аудио на чанки (размер: {self.chunk_size_seconds}s, перекрытие: {self.chunk_overlap_seconds}s)...")
             chunks = self._split_into_chunks(audio_data)
             total_chunks = len(chunks)
-            logger.info(f"Аудио разбито на {total_chunks} чанков для обработки")
+            logger.info(f"✅ Аудио разбито на {total_chunks} чанков для обработки (batch_size: {self.batch_size})")
             
             # Сброс флага логирования языка для новой транскрипции
             if hasattr(self, '_detected_language_logged'):
@@ -264,15 +269,22 @@ class MLXWhisperTranscriber:
             all_texts = []
             processed_chunks = 0
             
+            batch_num = 0
             for batch_chunks in self._batch_chunks(chunks, self.batch_size):
+                batch_num += 1
+                logger.info(f"🔄 Обработка батча {batch_num}: {len(batch_chunks)} чанков...")
+                batch_start_time = time.time()
                 batch_texts = self._transcribe_batch(batch_chunks)
+                batch_elapsed = time.time() - batch_start_time
+                logger.info(f"✅ Батч {batch_num} обработан за {batch_elapsed:.2f} секунд: получено {len(batch_texts)} текстов")
+                
                 all_texts.extend(batch_texts)
                 processed_chunks += len(batch_chunks)
                 
                 # Логирование прогресса
                 progress = (processed_chunks / total_chunks) * 100
                 elapsed = time.time() - start_time
-                logger.info(f"Прогресс: {processed_chunks}/{total_chunks} чанков ({progress:.1f}%) обработано за {elapsed:.1f}с")
+                logger.info(f"📊 Прогресс: {processed_chunks}/{total_chunks} чанков ({progress:.1f}%) обработано за {elapsed:.1f}с")
                 
                 # Очистка памяти после каждого батча
                 del batch_chunks
@@ -356,6 +368,7 @@ class MLXWhisperTranscriber:
             Список транскрибированных текстов
         """
         batch_texts = []
+        logger.info(f"🎤 Начало транскрипции батча из {len(batch_chunks)} чанков")
         
         # Обрабатываем каждый чанк в батче
         # MLX Whisper может обрабатывать батчи, но для совместимости обрабатываем последовательно
@@ -365,9 +378,13 @@ class MLXWhisperTranscriber:
         language_param = None
         if self.mlx_config.language and self.mlx_config.language.lower() != "auto":
             language_param = self.mlx_config.language
+        else:
+            logger.debug("🌍 Автоопределение языка для батча...")
         
-        for chunk in batch_chunks:
+        for idx, chunk in enumerate(batch_chunks):
             try:
+                chunk_duration = len(chunk) / self.sample_rate
+                logger.debug(f"  Обработка чанка {idx+1}/{len(batch_chunks)} ({chunk_duration:.1f}s)...")
                 result = whisper.transcribe(
                     chunk,
                     path_or_hf_repo=self.mlx_config.model_name,
@@ -378,6 +395,7 @@ class MLXWhisperTranscriber:
                     verbose=False,
                 )
                 text = self._extract_text_from_result(result)
+                logger.debug(f"  ✅ Чанк {idx+1} обработан: {len(text)} символов")
                 
                 # Логируем определенный язык из первого чанка
                 if isinstance(result, dict) and "language" in result and not hasattr(self, '_detected_language_logged'):
