@@ -1,0 +1,82 @@
+# VTTv2 Configuration - MacBook Air M1 (8GB RAM)
+
+# ⭐ Оптимизировано для MacBook Air M1 с 8GB RAM
+# Использует MLX Whisper с моделью Medium для оптимального баланса качества и памяти
+
+app:
+  version: "1.0.0"
+  name: "VTTv2"
+
+# ⭐ Движок транскрипции - MLX Whisper (оптимизировано для Apple Silicon)
+transcription:
+  engine: mlx_whisper  # mlx_whisper или whisper_cpp
+  mlx_whisper:
+    # Модель MLX (автоматически скачивается при первом использовании)
+    # Доступные модели: mlx-community/whisper-tiny, whisper-small, whisper-medium, whisper-large-v3
+    model_name: "mlx-community/whisper-medium"  # Оптимально для M1 с 8GB RAM
+    language: "ru"
+    temperature: 0.0
+    beam_size: 5
+    best_of: 5
+    no_speech_threshold: 0.6
+    compression_ratio_threshold: 2.4
+  whisper_cpp:
+    # Путь к бинарнику whisper (относительно проекта или абсолютный)
+    # Только для fallback - MLX Whisper используется по умолчанию
+    binary_path: "./whisper.cpp/build/bin/whisper-cli"
+    # Путь к модели (Medium Q5_0 квантизация - оптимально для M1 с 8GB RAM)
+    model_path: "./models/ggml-medium-q5_0.bin"
+    # ⭐ Core ML для M1 (Neural Engine) - опционально для whisper.cpp fallback
+    # Metal GPU ускорение работает и без Core ML
+    use_coreml: false
+    # ⭐ Metal для GPU ускорения
+    use_metal: true
+    # Количество потоков (4 для M1 - оптимально для баланса производительности и памяти)
+    threads: 4
+    # Язык
+    language: "ru"
+    # Параметры качества
+    temperature: 0.0
+    beam_size: 5
+    best_of: 5
+    patience: 1.0
+    # Дополнительные параметры
+    no_speech_threshold: 0.6
+    compression_ratio_threshold: 2.4
+
+# Аудио
+audio:
+  sample_rate: 16000
+  channels: 1
+  device_index: null  # null = default microphone
+  chunk_size: 1024
+  max_recording_duration: 3600  # 1 час
+
+# UI и управление
+ui:
+  auto_paste_enabled: true
+  auto_paste_method: cgevent  # cgevent или clipboard
+  hotkey: "option+space"      # Option+Space для toggle
+
+menu_bar:
+  icon_idle: "🎤"
+  icon_recording: "🔴"
+  show_status: true
+
+# Постобработка текста (опционально)
+text_processing:
+  enabled: false
+  # Можно добавить позже: punctuation, vocabulary, debloat
+
+# Производительность
+performance:
+  use_neural_engine: true
+  max_concurrent_tasks: 1
+  memory_limit_mb: 4096  # 4GB для M1 (8GB RAM) - оптимизация под ограниченную память
+
+# Логирование
+logging:
+  level: INFO  # INFO для нормальной работы, DEBUG для диагностики
+  format: "%(asctime)s %(levelname)s %(name)s %(message)s"
+  file: null  # null = только консоль
+
