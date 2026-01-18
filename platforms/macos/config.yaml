@@ -1,23 +1,35 @@
 # VTTv2 Configuration
 
 app:
-  version: "1.2.0"
+  version: "1.0.0"
   name: "VTTv2"
 
-# ⭐ Движок транскрипции - whisper.cpp
+# ⭐ Движок транскрипции - MLX Whisper (оптимизировано для Apple Silicon)
 transcription:
-  engine: whisper_cpp
+  engine: mlx_whisper  # mlx_whisper или whisper_cpp
+  mlx_whisper:
+    # Модель MLX (автоматически скачивается при первом использовании)
+    # Доступные модели: mlx-community/whisper-tiny, whisper-small, whisper-medium, whisper-large-v3
+    model_name: "mlx-community/whisper-medium"  # Оптимально для M1 с 8GB RAM
+    language: "ru"
+    temperature: 0.0
+    beam_size: 5
+    best_of: 5
+    no_speech_threshold: 0.6
+    compression_ratio_threshold: 2.4
   whisper_cpp:
     # Путь к бинарнику whisper (относительно проекта или абсолютный)
+    # Только для fallback - MLX Whisper используется по умолчанию
     binary_path: "./whisper.cpp/build/bin/whisper-cli"
-    # Путь к модели
-    model_path: "./models/ggml-large-v3.bin"
-    # ⭐ Core ML для M4 Max
-    use_coreml: true
+    # Путь к модели (Medium Q5_0 квантизация - оптимально для M1 с 8GB RAM)
+    model_path: "./models/ggml-medium-q5_0.bin"
+    # ⭐ Core ML для M1 (Neural Engine) - опционально для whisper.cpp fallback
+    # Metal GPU ускорение работает и без Core ML
+    use_coreml: false
     # ⭐ Metal для GPU ускорения
     use_metal: true
-    # Количество потоков (8 performance cores на M4 Max)
-    threads: 8
+    # Количество потоков (4 для M1 - оптимально для баланса производительности и памяти)
+    threads: 4
     # Язык
     language: "ru"
     # Параметры качества
@@ -26,11 +38,7 @@ transcription:
     best_of: 5
     patience: 1.0
     # Дополнительные параметры
-    # ⭐ no_speech_threshold: порог для определения "нет речи" (0.0-1.0)
-    # Меньше значение = более чувствительная транскрипция (может захватывать тихую речь)
-    # Для длинных записей рекомендуется 0.3-0.4 вместо 0.6
-    no_speech_threshold: 0.3
-    # compression_ratio_threshold: порог компрессии для фильтрации повторов
+    no_speech_threshold: 0.6
     compression_ratio_threshold: 2.4
 
 # Аудио
@@ -61,11 +69,11 @@ text_processing:
 performance:
   use_neural_engine: true
   max_concurrent_tasks: 1
-  memory_limit_mb: 16384  # 16GB для M4 Max
+  memory_limit_mb: 4096  # 4GB для M1 (8GB RAM) - оптимизация под ограниченную память
 
 # Логирование
 logging:
-  level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: INFO  # INFO для нормальной работы, DEBUG для диагностики
   format: "%(asctime)s %(levelname)s %(name)s %(message)s"
-  file: "./logs/vtt2.log"  # Путь к файлу логов (null = только консоль)
+  file: null  # null = только консоль
 
