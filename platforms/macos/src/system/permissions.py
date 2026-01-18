@@ -31,8 +31,8 @@ class PermissionsChecker:
     def __init__(self):
         """Инициализация проверки разрешений"""
         if not PYOBJC_AVAILABLE:
-            logger.error("PyObjC недоступен - проверка разрешений невозможна")
-            sys.exit(1)
+            logger.warning("PyObjC недоступен - проверка разрешений невозможна, но приложение продолжит работу")
+            # Не завершаем приложение, только предупреждаем
         
         logger.info("Инициализация проверки разрешений")
     
@@ -49,6 +49,10 @@ class PermissionsChecker:
         Raises:
             SystemExit: Если разрешение не предоставлено и fail_fast=True
         """
+        if not PYOBJC_AVAILABLE:
+            logger.warning("PyObjC недоступен - не можем проверить разрешение микрофона")
+            return False
+        
         try:
             # Проверка через AVFoundation
             from AVFoundation import AVAudioSession
@@ -112,6 +116,10 @@ class PermissionsChecker:
         Raises:
             SystemExit: Если разрешение не предоставлено и fail_fast=True
         """
+        if not PYOBJC_AVAILABLE:
+            logger.warning("PyObjC недоступен - не можем проверить разрешение Accessibility")
+            return False
+        
         try:
             # Проверка через попытку создания CGEvent
             # Если можем создать событие - разрешение есть
