@@ -1,0 +1,38 @@
+# VTTv2 - Voice-to-Text для macOS
+# Зависимости проекта
+
+# Core dependencies
+pydantic>=2.0.0                    # Валидация конфигурации
+pyyaml>=6.0                        # Парсинг YAML
+
+# System integration
+rumps>=0.4.0                       # macOS menu bar
+quickmachotkey>=2025.7.28          # Глобальные горячие клавиши (надежное решение для macOS)
+pynput>=1.7.6                      # Глобальные горячие клавиши (legacy, будет удалено после миграции)
+PyObjC>=11.0.0                     # macOS API (микрофон, Accessibility, CGEvent)
+
+# Audio
+sounddevice>=0.4.6                 # Запись аудио
+soundfile>=0.12.0                  # Сохранение WAV файлов для whisper.cpp
+numpy>=1.24.0                       # Обработка аудио данных
+
+# Utilities
+pyperclip>=1.8.0                   # Буфер обмена
+psutil>=5.9.0                      # Мониторинг системы
+
+# Logging
+coloredlogs>=15.0.1                # Улучшенное логирование (опционально)
+
+# MLX Whisper (оптимизировано для Apple Silicon) ⭐
+mlx>=0.29.0                        # Apple MLX framework
+mlx-whisper>=0.4.0                 # MLX Whisper implementation
+
+# Testing dependencies
+pytest>=8.0.0                      # Тестирование
+pytest-cov>=4.0.0                  # Покрытие кода
+pytest-mock>=3.12.0                # Моки для тестирования
+
+# Code quality
+ruff>=0.1.0                         # Линтинг и форматирование кода
+
+
