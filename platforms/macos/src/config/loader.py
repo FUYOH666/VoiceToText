@@ -13,6 +13,17 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
+class MLXWhisperConfig(BaseModel):
+    """Конфигурация MLX Whisper"""
+    model_name: str = Field("mlx-community/whisper-medium", description="Название модели MLX (например, mlx-community/whisper-medium)")
+    language: str = Field("ru", description="Язык транскрипции")
+    temperature: float = Field(0.0, ge=0.0, le=1.0, description="Temperature")
+    beam_size: int = Field(5, ge=1, description="Beam size")
+    best_of: int = Field(5, ge=1, description="Best of")
+    no_speech_threshold: float = Field(0.6, ge=0.0, le=1.0, description="No speech threshold")
+    compression_ratio_threshold: float = Field(2.4, ge=0.0, description="Compression ratio threshold")
+
+
 class WhisperCppConfig(BaseModel):
     """Конфигурация whisper.cpp"""
     binary_path: str = Field(..., description="Путь к бинарнику whisper")
@@ -31,8 +42,19 @@ class WhisperCppConfig(BaseModel):
 
 class TranscriptionConfig(BaseModel):
     """Конфигурация транскрипции"""
-    engine: Literal["whisper_cpp"] = Field("whisper_cpp", description="Движок транскрипции")
-    whisper_cpp: WhisperCppConfig = Field(..., description="Настройки whisper.cpp")
+    engine: Literal["whisper_cpp", "mlx_whisper"] = Field("mlx_whisper", description="Движок транскрипции")
+    whisper_cpp: Optional[WhisperCppConfig] = Field(None, description="Настройки whisper.cpp")
+    mlx_whisper: Optional[MLXWhisperConfig] = Field(None, description="Настройки MLX Whisper")
+    
+    @model_validator(mode='after')
+    def validate_engine_config(self):
+        """Проверка что конфигурация движка соответствует выбранному движку"""
+        if self.engine == "whisper_cpp" and not self.whisper_cpp:
+            raise ValueError("whisper_cpp движок требует whisper_cpp конфигурацию")
+        if self.engine == "mlx_whisper" and not self.mlx_whisper:
+            # Создаем дефолтную конфигурацию если не указана
+            self.mlx_whisper = MLXWhisperConfig()
+        return self
 
 
 class AudioConfig(BaseModel):
@@ -97,19 +119,20 @@ class Config(BaseModel):
     @model_validator(mode='after')
     def validate_paths(self) -> 'Config':
         """Проверка путей к файлам"""
-        # Проверка бинарника whisper.cpp
-        binary_path = Path(self.transcription.whisper_cpp.binary_path)
-        if not binary_path.is_absolute():
-            # Относительный путь - разрешаем относительно проекта
-            # Будет проверен позже при инициализации
-            pass
-        
-        # Проверка модели
-        model_path = Path(self.transcription.whisper_cpp.model_path)
-        if not model_path.is_absolute():
-            # Относительный путь - разрешаем относительно проекта
-            # Будет проверен позже при инициализации
-            pass
+        # Проверка бинарника whisper.cpp (только если используется whisper_cpp)
+        if self.transcription.whisper_cpp:
+            binary_path = Path(self.transcription.whisper_cpp.binary_path)
+            if not binary_path.is_absolute():
+                # Относительный путь - разрешаем относительно проекта
+                # Будет проверен позже при инициализации
+                pass
+            
+            # Проверка модели
+            model_path = Path(self.transcription.whisper_cpp.model_path)
+            if not model_path.is_absolute():
+                # Относительный путь - разрешаем относительно проекта
+                # Будет проверен позже при инициализации
+                pass
         
         return self
     
