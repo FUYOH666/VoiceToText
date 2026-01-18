@@ -6,6 +6,7 @@ import numpy as np
 from typing import Protocol
 
 from .whisper_cpp import WhisperCppTranscriber
+from .mlx_engine import MLXWhisperTranscriber
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ class TranscriptionEngineWrapper:
         if engine_type == "whisper_cpp":
             self.engine = WhisperCppTranscriber(config)
             logger.info("Используется движок: whisper.cpp")
+        elif engine_type == "mlx_whisper":
+            self.engine = MLXWhisperTranscriber(config)
+            logger.info("Используется движок: MLX Whisper (Apple Silicon)")
         else:
             raise ValueError(f"Неизвестный движок: {engine_type}")
     
