@@ -110,9 +110,25 @@ class WhisperCppTranscriber:
                 timeout=self.config.audio.max_recording_duration * 2  # Таймаут = 2x длительности записи
             )
             
+            # Детальное логирование для отладки
+            logger.debug(f"whisper.cpp stdout: {result.stdout}")
+            if result.stderr:
+                logger.debug(f"whisper.cpp stderr: {result.stderr}")
+            
             if result.returncode != 0:
                 logger.error(f"Ошибка whisper.cpp (код {result.returncode})")
+                logger.error(f"Команда: {' '.join(cmd)}")
                 logger.error(f"stderr: {result.stderr}")
+                logger.error(f"stdout: {result.stdout}")
+                
+                # Попытка диагностики
+                if "failed to initialize" in result.stderr.lower():
+                    logger.error("Возможные причины:")
+                    logger.error("1. Модель повреждена или несовместима")
+                    logger.error("2. Недостаточно памяти")
+                    logger.error("3. Core ML encoder не найден (если use_coreml=true)")
+                    logger.error("Попробуйте отключить Core ML: use_coreml: false")
+                
                 raise RuntimeError(f"Ошибка транскрипции: {result.stderr}")
             
             # Парсинг результата из файла
