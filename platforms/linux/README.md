@@ -25,21 +25,41 @@
 
 ## Установка
 
-### 1. Установка системных зависимостей
+### Быстрый старт
+
+```bash
+# 1. Клонировать репозиторий
+git clone https://github.com/FUYOH666/VoiceToText.git
+cd VoiceToText/platforms/linux
+
+# 2. Установить системные зависимости
+sudo apt update
+sudo apt install -y alsa-utils libnotify-bin xclip
+
+# 3. Установить Python зависимости
+uv sync
+
+# 4. Установить как сервис (рекомендуется)
+./scripts/install-service.sh
+```
+
+### Подробная установка
+
+#### 1. Установка системных зависимостей
 
 ```bash
 sudo apt update
 sudo apt install -y alsa-utils libnotify-bin xclip
 ```
 
-### 2. Установка Python зависимостей
+#### 2. Установка Python зависимостей
 
 ```bash
-cd /path/to/F9-asr  # Перейдите в директорию проекта
+cd platforms/linux  # Перейдите в директорию проекта
 uv sync
 ```
 
-### 3. Настройка конфигурации
+#### 3. Настройка конфигурации
 
 Отредактируйте `config.yaml` при необходимости:
 
@@ -52,7 +72,7 @@ hotkey:
   key: "f9"  # Клавиша для записи
 ```
 
-### 4. Установка как systemd service (рекомендуется)
+#### 4. Установка как systemd service (рекомендуется)
 
 Для постоянной работы и автозапуска:
 
@@ -79,7 +99,7 @@ systemctl --user restart f9-asr.service
 
 Подробнее см. [SERVICE.md](SERVICE.md)
 
-### 5. Запуск вручную (альтернатива)
+#### 5. Запуск вручную (альтернатива)
 
 Если не используете systemd service:
 
