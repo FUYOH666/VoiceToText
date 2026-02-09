@@ -1,0 +1,23 @@
+[Unit]
+Description=F9 ASR Voice Transcription Service
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+Environment="DISPLAY=:0"
+Environment="HOME=%h"
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+# WorkingDirectory будет установлен скриптом install-service.sh
+ExecStart=%h/.local/bin/uv run python -m f9_asr.main
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
