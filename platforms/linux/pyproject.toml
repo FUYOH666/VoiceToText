@@ -1,0 +1,27 @@
+[project]
+name = "f9-asr"
+version = "0.1.0"
+description = "Voice transcription on F9 keypress using ASR service on port 8001"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "pyyaml>=6.0",
+    "requests>=2.31.0",
+    "pynput>=1.7.6",
+]
+
+[project.scripts]
+f9-asr = "f9_asr.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+

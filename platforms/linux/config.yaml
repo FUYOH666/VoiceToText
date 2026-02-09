@@ -1,77 +1,53 @@
-# VoiceToText-Linux-F9 Configuration File
-# Настройки системы распознавания речи
+# F9 ASR Configuration
+# Конфигурация системы транскрипции голоса по F9
 
-# ===== MODEL SETTINGS =====
-# Доступные модели: tiny, base, small, medium, large-v3, large-v3-turbo-f16
-# Рекомендации:
-# - tiny: Быстрая, низкая точность (39MB)
-# - base: Хороший баланс (74MB)
-# - small: Лучшая точность (244MB)
-# - medium: Высокая точность (769MB)
-# - large-v3: Максимальная точность (2.9GB) - для русского языка
-# - large-v3-turbo-f16: Оптимизированная large модель (CPU, 12 потоков)
+# ASR Service settings
+asr:
+  # URL ASR сервиса
+  base_url: "http://localhost:8001"
+  # Endpoint для транскрипции (OpenAI-compatible)
+  transcription_endpoint: "/v1/audio/transcriptions"
+  # Таймаут запроса в секундах
+  timeout: 30
+  # Язык транскрипции (None для автоопределения, или "Russian", "English", etc.)
+  language: null
+  # Формат ответа: json, text, srt, verbose_json, vtt
+  # Используем json для более надежной обработки
+  response_format: "json"
 
-model: "large-v3-turbo-f16"
-# ⭐ Полный путь к файлу модели (важен для нестандартных моделей)
-model_path: "/home/ai/Документы/dev/VTT-Linux/ggml-large-v3-turbo-f16.bin"
+# Audio recording settings
+audio:
+  # Частота дискретизации (Hz)
+  sample_rate: 16000
+  # Каналы (1 = моно, 2 = стерео)
+  channels: 1
+  # Формат аудио (S16_LE для arecord)
+  format: "S16_LE"
+  # Временная директория для записи
+  temp_dir: "/tmp/f9-asr-recordings"
+  # Максимальная длительность записи в секундах (0 = без ограничений)
+  max_duration: 0
+  # Автоматическая очистка старых файлов (в часах, 0 = отключено)
+  # Файлы старше указанного времени будут удалены при старте
+  cleanup_max_age_hours: 24
 
-# ===== LANGUAGE SETTINGS =====
-# Доступные языки: ru, en, auto
-# - ru: Принудительно русский язык
-# - en: Принудительно английский язык
-# - auto: Автоопределение языка
+# Hotkey settings
+hotkey:
+  # Клавиша для запуска/остановки записи
+  key: "f9"
+  # Путь к PID файлу для отслеживания состояния
+  pid_file: "/tmp/f9-asr-recording.pid"
 
-language: "ru"
+# UI settings
+ui:
+  # Показывать уведомления (требует libnotify)
+  show_notifications: true
+  # Копировать результат в буфер обмена
+  copy_to_clipboard: true
 
-# ===== PERFORMANCE SETTINGS =====
-# Настройки производительности
-
-# Максимальный контекст (0 = без ограничений)
-max_context: 0
-
-# Максимальная длина сегмента (0 = без ограничений)
-max_len: 0
-
-# Использовать GPU (true/false)
-use_gpu: false
-
-# Число потоков CPU для whisper-cli (используется при use_gpu=false)
-cpu_threads: 12
-
-# ===== AUDIO SETTINGS =====
-# Настройки аудио
-
-# Частота дискретизации (Hz)
-sample_rate: 16000
-
-# Каналы (1 = моно, 2 = стерео)
-channels: 1
-
-# Формат аудио
-audio_format: "S16_LE"
-
-# ===== HOTKEY SETTINGS =====
-# Настройки горячей клавиши
-
-# Клавиша для запуска/остановки
-hotkey: "F9"
-
-# ===== FILE PATHS =====
-# Пути к файлам (обычно не нужно менять)
-
-whisper_path: "/home/ai/Projects/whisper.cpp"
-model_base_path: "/home/ai/Projects/whisper.cpp/models"
-temp_dir: "/tmp/whisper-recordings"
-pid_file: "/tmp/whisper-recording.pid"
-
-# ===== ADVANCED SETTINGS =====
-# Продвинутые настройки (для экспертов)
-
-# Дополнительные параметры whisper-cli
-extra_params: "--no-fallback --translate"
-
-# Таймаут записи в секундах (0 = бесконечно)
-recording_timeout: 0
-
-# Уровень логирования: DEBUG, INFO, WARNING, ERROR
-log_level: "INFO"
+# Logging settings
+logging:
+  # Уровень логирования: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  # Формат логов
+  format: "%(asctime)s · %(levelname)s · %(name)s · %(message)s"
