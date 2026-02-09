@@ -19,5 +19,12 @@ StandardError=journal
 NoNewPrivileges=true
 PrivateTmp=true
 
+# Memory limits (prevent memory leaks)
+# Ограничения памяти для предотвращения утечек
+MemoryMax=200M
+MemoryHigh=150M
+# Kill if memory exceeds limit
+MemoryLimit=200M
+
 [Install]
 WantedBy=default.target

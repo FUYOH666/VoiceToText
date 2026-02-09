@@ -110,11 +110,17 @@ class HotkeyHandler:
 
             if text and text.strip():
                 logger.info(f"Transcription: {text}")
-                self._show_notification("Transcription", text[:100] + ("..." if len(text) > 100 else ""))
+                # Limit notification text to avoid memory issues
+                notification_text = text[:100] + ("..." if len(text) > 100 else "")
+                self._show_notification("Transcription", notification_text)
 
                 # Copy to clipboard if enabled
                 if self.config.ui.copy_to_clipboard:
                     self._copy_to_clipboard(text)
+
+                # Clear text from memory after copying
+                del text
+                del notification_text
 
                 # Cleanup
                 self.recorder.cleanup()

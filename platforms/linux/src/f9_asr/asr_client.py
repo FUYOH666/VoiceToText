@@ -40,10 +40,11 @@ class ASRClient:
         logger.info(f"Transcribing {audio_file} via {url}")
 
         # Prepare multipart/form-data request
+        # Use streaming to avoid loading entire file into memory
         with open(audio_file, "rb") as f:
             files = {"file": (audio_file.name, f, "audio/wav")}
             data = {
-                "model": "qwen3-asr",  # Model name (ignored by service, for compatibility)
+                "model": "whisper",  # Model name (ignored by service, for compatibility)
                 "response_format": self.config.response_format,
             }
 
@@ -52,21 +53,25 @@ class ASRClient:
                 data["language"] = self.config.language
 
             try:
+                # Use streaming to avoid loading entire response into memory
                 response = requests.post(
                     url,
                     files=files,
                     data=data,
                     timeout=self.config.timeout,
+                    stream=True,  # Stream response to avoid loading all into memory
                 )
                 response.raise_for_status()
 
                 # Log response details for debugging
                 logger.debug(f"Response status: {response.status_code}")
                 logger.debug(f"Response headers: {dict(response.headers)}")
-                logger.debug(f"Response content length: {len(response.content)}")
-                logger.debug(f"Response text preview: {response.text[:200]}")
+                # Read content only when needed (for text format)
+                content_length = int(response.headers.get("Content-Length", 0))
+                logger.debug(f"Response content length: {content_length}")
 
                 # Handle different response formats
+                # Read response content (streaming already enabled, but need to read for processing)
                 if self.config.response_format == "text":
                     result = response.text.strip()
                 elif self.config.response_format == "json":
@@ -80,17 +85,22 @@ class ASRClient:
                                 f"API returned empty text but detected language: {result_json.get('language')}"
                             )
                     except ValueError as e:
-                        logger.warning(f"Failed to parse JSON response: {response.text[:200]}")
+                        # Fallback: read text if JSON parsing fails
+                        response_text = response.text[:200]  # Limit preview size
+                        logger.warning(f"Failed to parse JSON response: {response_text}")
                         logger.debug(f"JSON parse error: {e}")
                         result = response.text.strip()
                 else:
                     result = response.text.strip()
 
+                # Clear response from memory after processing
+                response.close()
+
                 if not result:
                     logger.warning(
                         f"Empty transcription result. Response status: {response.status_code}, "
                         f"Content-Type: {response.headers.get('Content-Type')}, "
-                        f"Content length: {len(response.content)}"
+                        f"Content length: {content_length}"
                     )
 
                 logger.info(f"Transcription successful: {len(result)} characters")

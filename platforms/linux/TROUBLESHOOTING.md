@@ -158,7 +158,7 @@ timeout 3 arecord -f S16_LE -r 16000 -c 1 /tmp/test.wav
 # Отправить на транскрипцию
 curl -X POST http://localhost:8001/v1/audio/transcriptions \
   -F "file=@/tmp/test.wav" \
-  -F "model=qwen3-asr" \
+  -F "model=whisper" \
   -F "response_format=json"
 ```
 

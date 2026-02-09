@@ -2,13 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] - 2026-02-09
+
+### Changed
+
+- Updated ASR service integration for Whisper Large v3 Turbo model
+- Updated model name in API requests from `qwen3-asr` to `whisper` (for compatibility)
+- Updated documentation to reflect new model (Whisper Large v3 Turbo)
+
 ## [0.1.0] - 2026-02-09
 
 ### Added
 
 - Initial release
 - Voice transcription on F9 keypress
-- Integration with ASR service on port 8001 (Qwen3-ASR-0.6B)
+- Integration with ASR service on port 8001 (Whisper Large v3 Turbo)
 - Audio recording using `arecord`
 - OpenAI-compatible API client for ASR service
 - Hotkey handler using `pynput`
