@@ -32,6 +32,10 @@ class AudioConfig(BaseSettings):
     channels: int = Field(default=1, ge=1, le=2, description="Number of channels")
     format: str = Field(default="S16_LE", description="Audio format")
     temp_dir: str = Field(default="/tmp/f9-asr-recordings", description="Temporary directory")
+    device: Optional[str] = Field(
+        default=None,
+        description="ALSA capture device (e.g. plughw:CARD=Generic_1,DEV=0). None = system default",
+    )
     max_duration: int = Field(
         default=0, ge=0, description="Max recording duration in seconds (0 = unlimited)"
     )

@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-02-22
+
+### Added
+
+- **Bluetooth-микрофон** — поддержка гарнитур через WirePlumber (профиль headset-head-unit)
+- Документация [docs/BLUETOOTH_MIC.md](docs/BLUETOOTH_MIC.md) — пошаговая настройка
+- Параметр `audio.device` в конфиге — явный выбор ALSA-устройства захвата
+
+### Changed
+
+- TROUBLESHOOTING: обновлён раздел про Bluetooth
+- README: добавлена ссылка на BLUETOOTH_MIC
+
 ## [0.1.1] - 2026-02-09
 
 ### Changed

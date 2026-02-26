@@ -63,6 +63,19 @@ journalctl --user -u f9-asr.service -f
 - Убедитесь, что сервис имеет доступ к микрофону
 - Проверьте права на `/tmp/f9-asr-recordings/`
 
+#### 5. Bluetooth-гарнитура / микрофон не виден
+
+**Симптомы:** При подключенной Bluetooth-гарнитуре запись идёт, но результат пустой. Или система не видит микрофон гарнитуры.
+
+**Причина:** Bluetooth подключается в режиме A2DP (только воспроизведение), без микрофона.
+
+**Решение:** Настроить WirePlumber на режим Headset (HFP). См. подробную инструкцию: [docs/BLUETOOTH_MIC.md](docs/BLUETOOTH_MIC.md)
+
+Кратко:
+1. Создать `~/.config/wireplumber/bluetooth.lua.d/51-headset-profile.lua` с `device.profile = "headset-head-unit"`
+2. Перезапустить WirePlumber, переподключить гарнитуру
+3. В `config.yaml`: `audio.device: null`
+
 ## Проблема: F9 не запускает запись
 
 ### Симптомы

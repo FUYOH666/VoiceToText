@@ -13,6 +13,7 @@
 - 🔒 **Конфиденциальность** - данные не сохраняются, только временная обработка
 - 🔄 **Стабильная работа** - автоперезапуск при сбоях через systemd
 - 💾 **Низкое потребление памяти** - всего ~36MB с автоматическими лимитами
+- 🎧 **Bluetooth-гарнитуры** - поддержка микрофона при настройке WirePlumber (см. [docs/BLUETOOTH_MIC.md](docs/BLUETOOTH_MIC.md))
 
 ## Требования
 
@@ -168,6 +169,7 @@ f9_asr/
 - [SERVICE.md](SERVICE.md) - Управление systemd service
 - [PRIVACY.md](PRIVACY.md) - Конфиденциальность и очистка данных
 - [MEMORY.md](MEMORY.md) - Управление памятью и оптимизация
+- [docs/BLUETOOTH_MIC.md](docs/BLUETOOTH_MIC.md) - Bluetooth-микрофон
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Решение проблем
 
 ## Troubleshooting

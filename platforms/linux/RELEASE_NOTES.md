@@ -1,6 +1,12 @@
-# Release Notes v0.1.0
+# Release Notes
 
-## 🎉 Первый релиз F9 ASR
+## v0.1.2 (2026-02-22)
+
+- Bluetooth-микрофон (WirePlumber headset-head-unit)
+- Параметр `audio.device` в конфиге
+- Обновлены зависимости (pydantic-settings, certifi)
+
+## v0.1.0 — Первый релиз
 
 Система транскрипции голоса по нажатию клавиши F9 с использованием ASR сервиса.
 

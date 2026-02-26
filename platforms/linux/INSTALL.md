@@ -44,7 +44,11 @@ curl http://localhost:8001/healthz
 uv run python -m f9_asr.main
 ```
 
-### 5. Использование
+### 5. Bluetooth-микрофон (опционально)
+
+Если используете Bluetooth-гарнитуру, см. [docs/BLUETOOTH_MIC.md](docs/BLUETOOTH_MIC.md) — настройка WirePlumber для режима Headset (микрофон).
+
+### 6. Использование
 
 После установки сервиса приложение уже работает в фоне. Просто нажмите **F9** для начала записи!
 

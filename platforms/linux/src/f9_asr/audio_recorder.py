@@ -48,13 +48,12 @@ class AudioRecorder:
         logger.info(f"Starting recording to {self.temp_file}")
 
         # Build arecord command
-        cmd = [
-            "arecord",
-            "-f", self.config.format,
-            "-r", str(self.config.sample_rate),
-            "-c", str(self.config.channels),
-            str(self.temp_file),
-        ]
+        cmd = ["arecord", "-f", self.config.format, "-r", str(self.config.sample_rate)]
+        device = getattr(self.config, "device", None)
+        if device:
+            cmd.extend(["-D", device])
+            logger.debug(f"Using ALSA device: {device}")
+        cmd.extend(["-c", str(self.config.channels), str(self.temp_file)])
 
         try:
             self.recording_process = subprocess.Popen(

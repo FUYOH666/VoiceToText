@@ -27,6 +27,7 @@ uv sync
 - [INSTALL.md](INSTALL.md) - Подробная установка
 - [SERVICE.md](SERVICE.md) - Управление сервисом
 - [PRIVACY.md](PRIVACY.md) - Конфиденциальность
+- [docs/BLUETOOTH_MIC.md](docs/BLUETOOTH_MIC.md) - Bluetooth-микрофон
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Решение проблем
 
 ## ✨ Особенности
@@ -38,6 +39,7 @@ uv sync
 - 🧹 Автоматическая очистка файлов
 - 🔒 Конфиденциальность - данные не сохраняются
 - 🔄 Стабильная работа через systemd
+- 🎧 Bluetooth-гарнитуры (см. docs/BLUETOOTH_MIC.md)
 
 ## 📋 Требования
 
