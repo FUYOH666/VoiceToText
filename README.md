@@ -136,6 +136,16 @@ For verbose output: `uv run python src/vtt2/main.py --verbose`
 
 Whisper supports 99 languages including English, Russian, Chinese, Japanese, Spanish, French, German, Arabic, Hindi, and many more. Set `language: "auto"` in config (default) and it detects automatically.
 
+## Development
+
+```bash
+# Run tests
+uv run pytest
+
+# Benchmark transcription speed
+uv run python test_transcription_speed.py
+```
+
 ## License
 
 MIT

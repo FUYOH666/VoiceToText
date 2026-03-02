@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-Тест скорости транскрипции для разных длин записей
+Benchmark transcription speed for various audio durations.
+Run from project root: uv run python test_transcription_speed.py
 """
 import sys
 import time
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, 'src/vtt2')
+# Ensure project root is in path
+_project_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(_project_root / "src"))
 
-from config.loader import Config
-from transcription.mlx_engine import MLXWhisperTranscriber
+from vtt2.config.loader import Config
+from vtt2.transcription.mlx_engine import MLXWhisperTranscriber
 
 def generate_test_audio(duration_seconds: int, sample_rate: int = 16000) -> np.ndarray:
     """Генерация тестового аудио (белый шум с тоном)"""
@@ -28,9 +31,9 @@ def test_transcription_speed(config_path: str = "config.yaml"):
     print("ТЕСТ СКОРОСТИ ТРАНСКРИПЦИИ")
     print("=" * 60)
     
-    # Загрузка конфигурации
-    project_root = Path.cwd()
-    config = Config.from_yaml(config_path, project_root)
+    # Load config
+    project_root = _project_root
+    config = Config.from_yaml(str(project_root / config_path), project_root)
     
     # Инициализация транскрибера
     print("\n📦 Инициализация транскрибера...")
