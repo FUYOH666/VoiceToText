@@ -3,7 +3,7 @@
 """
 import pytest
 import numpy as np
-from src.audio.processor import AudioProcessor
+from audio.processor import AudioProcessor
 
 
 class TestAudioProcessor:

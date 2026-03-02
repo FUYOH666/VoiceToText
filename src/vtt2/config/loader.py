@@ -225,8 +225,7 @@ class Config(BaseModel):
             except (ValueError, AttributeError):
                 pass  # Оставляем как строку
             
-            # Установка значения (примерно - упрощенная версия)
-            # В реальной версии нужна более сложная логика для вложенных структур
+            set_nested_value(config_data, keys, env_value)
             logger.debug(f"ENV override: {env_key} = {env_value}")
         
         return config_data

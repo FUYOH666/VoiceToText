@@ -1,6 +1,6 @@
 """
 Проверка разрешений macOS для VTTv2
-Проверка разрешений микрофона и Accessibility
+Проверка разрешений микрофона, Accessibility и Input Monitoring
 """
 import logging
 import sys
@@ -9,7 +9,11 @@ try:
     from AppKit import NSWorkspace
     from Quartz import (
         CGEventSourceKeyState,
-        kCGEventSourceStateHIDSystemState
+        CGEventCreateKeyboardEvent,
+        CGEventPost,
+        kCGEventSourceStateHIDSystemState,
+        kCGSessionEventTap,
+        kCGAnnotatedSessionEventTap,
     )
     from PyObjCTools import AppHelper
     import AVFoundation
@@ -134,6 +138,72 @@ class PermissionsChecker:
                 sys.exit(1)
             return False
     
+    def check_input_monitoring_permission(self, fail_fast: bool = True) -> bool:
+        """
+        Проверка разрешения Input Monitoring для CGEventPost (требуется в macOS Sequoia 15+)
+        
+        В macOS Sequoia и новее требуется отдельное разрешение Input Monitoring
+        для использования CGEventPost для эмуляции клавиатуры.
+        
+        Args:
+            fail_fast: Если True, завершает процесс при ошибке (default: True)
+        
+        Returns:
+            True если разрешение предоставлено, False иначе
+        
+        Raises:
+            SystemExit: Если разрешение не предоставлено и fail_fast=True
+        """
+        try:
+            # Проверяем через попытку создания и отправки тестового события
+            # Если можем создать и отправить событие - разрешение есть
+            try:
+                # Создаем тестовое событие (невидимое для пользователя)
+                test_key = 0x35  # Escape key (обычно не влияет на работу)
+                test_event = CGEventCreateKeyboardEvent(None, test_key, False)  # Key up event
+                
+                # Пробуем отправить через kCGSessionEventTap
+                try:
+                    CGEventPost(kCGSessionEventTap, test_event)
+                    logger.info("✅ Разрешение Input Monitoring предоставлено")
+                    return True
+                except Exception as e1:
+                    # Пробуем альтернативный метод через kCGAnnotatedSessionEventTap
+                    try:
+                        CGEventPost(kCGAnnotatedSessionEventTap, test_event)
+                        logger.info("✅ Разрешение Input Monitoring предоставлено (через AnnotatedSession)")
+                        return True
+                    except Exception as e2:
+                        # Если оба метода не работают - вероятно нет разрешения
+                        logger.warning(f"⚠️ CGEventPost не работает: kCGSessionEventTap={e1}, kCGAnnotatedSessionEventTap={e2}")
+                        logger.error("❌ Разрешение Input Monitoring не предоставлено")
+                        logger.error("Перейдите в Системные настройки > Конфиденциальность и безопасность > Мониторинг ввода")
+                        logger.error("Добавьте Terminal или приложение в список разрешенных")
+                        logger.error("Это разрешение требуется в macOS Sequoia (15+) для автовставки текста")
+                        if fail_fast:
+                            sys.exit(1)
+                        return False
+            except Exception as e:
+                logger.warning(f"Не удалось проверить Input Monitoring через тестовое событие: {e}")
+                # Fallback: если можем получить состояние клавиши, вероятно разрешение есть
+                try:
+                    CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, 0)
+                    logger.info("✅ Разрешение Input Monitoring вероятно предоставлено (проверка через fallback)")
+                    return True
+                except Exception:
+                    logger.error("❌ Разрешение Input Monitoring не предоставлено")
+                    logger.error("Перейдите в Системные настройки > Конфиденциальность и безопасность > Мониторинг ввода")
+                    if fail_fast:
+                        sys.exit(1)
+                    return False
+        except Exception as e:
+            logger.error(f"Ошибка проверки разрешения Input Monitoring: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
+            if fail_fast:
+                sys.exit(1)
+            return False
+    
     def check_all_permissions(self, fail_fast: bool = True) -> bool:
         """
         Проверка всех необходимых разрешений
@@ -151,8 +221,9 @@ class PermissionsChecker:
         
         mic_ok = self.check_microphone_permission(fail_fast=fail_fast)
         accessibility_ok = self.check_accessibility_permission(fail_fast=fail_fast)
+        input_monitoring_ok = self.check_input_monitoring_permission(fail_fast=fail_fast)
         
-        if mic_ok and accessibility_ok:
+        if mic_ok and accessibility_ok and input_monitoring_ok:
             logger.info("✅ Все необходимые разрешения предоставлены")
             return True
         

@@ -6,7 +6,7 @@ import yaml
 from pathlib import Path
 import os
 import tempfile
-from src.config.loader import Config, MLXWhisperConfig, WhisperCppConfig, TranscriptionConfig
+from config.loader import Config, MLXWhisperConfig, WhisperCppConfig, TranscriptionConfig
 
 
 class TestConfigLoader:

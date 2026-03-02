@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "vtt2"))
 
 
 class TestMLXWhisperTranscription:
@@ -16,7 +16,7 @@ class TestMLXWhisperTranscription:
     @patch('mlx_whisper.transcribe')
     def test_transcribe_success(self, mock_transcribe):
         """Тест успешной транскрипции"""
-        from src.transcription.mlx_engine import MLXWhisperTranscriber
+        from transcription.mlx_engine import MLXWhisperTranscriber
         
         # Мокируем результат транскрипции
         mock_transcribe.return_value = {
@@ -53,7 +53,7 @@ class TestMLXWhisperTranscription:
     @patch('mlx_whisper.transcribe')
     def test_transcribe_empty_result(self, mock_transcribe):
         """Тест обработки пустого результата транскрипции"""
-        from src.transcription.mlx_engine import MLXWhisperTranscriber
+        from transcription.mlx_engine import MLXWhisperTranscriber
         
         # Мокируем пустой результат
         mock_transcribe.return_value = {"text": ""}
@@ -80,7 +80,7 @@ class TestMLXWhisperTranscription:
     @patch('mlx_whisper.transcribe')
     def test_transcribe_error_handling(self, mock_transcribe):
         """Тест обработки ошибок транскрипции"""
-        from src.transcription.mlx_engine import MLXWhisperTranscriber
+        from transcription.mlx_engine import MLXWhisperTranscriber
         
         # Мокируем ошибку
         mock_transcribe.side_effect = Exception("Ошибка транскрипции")
@@ -106,7 +106,7 @@ class TestMLXWhisperTranscription:
     @patch('mlx_whisper.transcribe')
     def test_transcribe_audio_normalization(self, mock_transcribe):
         """Тест нормализации аудио перед транскрипцией"""
-        from src.transcription.mlx_engine import MLXWhisperTranscriber
+        from transcription.mlx_engine import MLXWhisperTranscriber
         
         mock_transcribe.return_value = {"text": "test"}
         
@@ -143,8 +143,8 @@ class TestTranscriptionEngineWrapper:
     
     def test_engine_selection_mlx(self):
         """Тест выбора движка MLX Whisper"""
-        from src.transcription.engine import TranscriptionEngineWrapper
-        from src.transcription.mlx_engine import MLXWhisperTranscriber
+        from transcription.engine import TranscriptionEngineWrapper
+        from transcription.mlx_engine import MLXWhisperTranscriber
         
         mock_config = MagicMock()
         mock_config.transcription.engine = "mlx_whisper"
@@ -163,7 +163,7 @@ class TestTranscriptionEngineWrapper:
     
     def test_engine_selection_invalid(self):
         """Тест выбора невалидного движка"""
-        from src.transcription.engine import TranscriptionEngineWrapper
+        from transcription.engine import TranscriptionEngineWrapper
         
         mock_config = MagicMock()
         mock_config.transcription.engine = "invalid_engine"

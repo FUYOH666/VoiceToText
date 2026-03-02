@@ -1,330 +1,145 @@
-# MLX Platform
+# VTT MLX
 
-[🇷🇺 Русская версия](#русская-версия)
+**Voice-to-text that runs entirely on your Mac.** No cloud, no subscription, no internet after setup.
 
-Voice-to-Text application optimized for Apple Silicon using MLX Whisper framework.
+Press **Option+Space**, speak, and the transcribed text appears where your cursor is.
 
-## 🚀 Быстрый запуск
+## How it works
 
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py
-```
+1. Press **Option+Space** to start recording
+2. Speak (any language -- auto-detected)
+3. Press **Option+Space** again to stop
+4. Text is transcribed locally and pasted into the active app
 
-Для health check:
-
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py --health
-```
-
-## Features
-
-- ⚡ **MLX optimized** for Apple Silicon (M1/M2/M3/M4)
-- 🚀 **Fast performance** (~42x real-time, tested on M4 Max)
-  - 5-minute recording: ~6 seconds
-  - 15-minute recording: ~20 seconds
-  - 45-minute recording: ~1 minute
-- 💾 **Efficient memory usage** (~1.5GB for medium model, ~3-4GB for large-v3 model)
-- 🔒 **100% offline** - no internet required after initial model download
-- 🆓 **Completely free** - no API keys needed
-- 🎯 **Optimized for M4 Max** - supports long recordings (15-45 minutes) with large-v3 model
-- 📦 **Chunked processing** - automatic splitting for long recordings with overlap
-- ⚙️ **Batch processing** - utilizes all 40 GPU cores on M4 Max
-- 🌍 **Auto language detection** - automatically detects language (Russian, Chinese, English, etc.)
-- 🔄 **24/7 operation** - automatic memory management and error recovery for continuous operation
+Powered by [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) on Apple Silicon. Runs ~42x faster than real-time on M4 Max.
 
 ## Requirements
 
-- macOS with Apple Silicon (M1/M2/M3/M4)
-- Python 3.12+
-- MLX framework
-- 8GB+ RAM recommended (16GB+ for large-v3 model on M4 Max)
-- [uv](https://github.com/astral-sh/uv) package manager (recommended)
+- Mac with Apple Silicon (M1, M2, M3, M4 -- any variant)
+- macOS 13+ (Ventura or later)
+- 8 GB RAM minimum (see [model selection](#choose-a-model) below)
+- [uv](https://docs.astral.sh/uv/) package manager
 
-## Installation
-
-Using `uv` (recommended):
+## Install
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and set up
+git clone https://github.com/FUYOH666/VoiceToText.git
+cd VoiceToText
 uv sync
 ```
 
-Or using `pip`:
+The Whisper model downloads automatically on first use (~6 GB for large-v3). After that, everything works offline.
+
+## Run
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4
-pip install -r requirements.txt
+uv run python src/vtt2/main.py
 ```
 
-## Usage
+A microphone icon appears in your menu bar. Press **Option+Space** to record.
 
-Quick start:
+### Run as a background service
+
+To start automatically on login and restart on crash:
 
 ```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py
+# Install
+uv run python src/vtt2/main.py --install
+
+# Check status
+uv run python src/vtt2/main.py --status
+
+# Remove
+uv run python src/vtt2/main.py --uninstall
 ```
 
-Health check:
+## macOS permissions
 
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py --health
+On first launch macOS will ask for three permissions. **All three are required:**
+
+| Permission | Why | Where to grant |
+|---|---|---|
+| Microphone | Record your voice | Privacy & Security > Microphone |
+| Accessibility | Global hotkey (Option+Space) | Privacy & Security > Accessibility |
+| Input Monitoring | Auto-paste text (Cmd+V) | Privacy & Security > Input Monitoring |
+
+If hotkeys don't work, add your terminal app (Terminal, iTerm, Cursor) to **Accessibility** and **Input Monitoring**, then restart the app.
+
+## Choose a model
+
+Edit `config.yaml` to pick a model that fits your Mac:
+
+| Model | RAM needed | Quality | Speed |
+|---|---|---|---|
+| `whisper-tiny-mlx` | 2 GB | Basic | Fastest |
+| `whisper-small-mlx` | 4 GB | Good | Fast |
+| `whisper-medium-mlx` | 6 GB | Great | Fast |
+| `whisper-large-v3-mlx` | 10 GB | Best | Fast |
+
+All models are from [mlx-community](https://huggingface.co/mlx-community) on Hugging Face. The full model name uses the prefix `mlx-community/`, for example:
+
+```yaml
+transcription:
+  mlx_whisper:
+    model_name: "mlx-community/whisper-large-v3-mlx"
 ```
+
+Default is `whisper-large-v3-mlx` (best quality). If you have 8 GB RAM, use `whisper-medium-mlx`.
 
 ## Configuration
 
-Edit `config.yaml` to customize settings:
+All settings are in `config.yaml`:
 
 ```yaml
-transcription:
-  mlx_whisper:
-    model_name: "mlx-community/whisper-large-v3-mlx"  # large-v3 for M4 Max
-    language: "auto"  # "auto" for automatic language detection, or language code: "ru", "en", "zh" (Chinese), "ja" (Japanese), etc.
-    chunk_size_seconds: 30  # Chunk size for long recordings
-    chunk_overlap_seconds: 2  # Overlap between chunks
-    batch_size: 6  # Batch size for parallel processing (optimal for large-v3 on M4 Max)
+# Language: "auto" detects automatically, or set "en", "ru", "zh", "ja", etc.
+language: "auto"
 
-performance:
-  memory_limit_mb: 16384  # 16GB for M4 Max (128GB RAM)
-  auto_cleanup_enabled: true  # Automatic memory cleanup
-  cleanup_threshold_percent: 75  # Cleanup threshold (75% of limit)
-  periodic_cleanup_interval: 10  # Cleanup every N transcriptions
+# Hotkey
+hotkey: "option+space"
 
-audio:
-  max_recording_duration: 7200  # 2 hours (supports 15-45 minute recordings)
+# Auto-paste transcribed text into the active app
+auto_paste_enabled: true
+
+# Max recording length (seconds)
+max_recording_duration: 7200  # 2 hours
 ```
 
-## Performance
-
-- **Speed**: ~42x real-time (tested on M4 Max)
-  - 5-minute recording: ~6 seconds
-  - 15-minute recording: ~20 seconds
-  - 45-minute recording: ~1 minute
-- **Memory**: ~1.5GB (medium model), ~3-4GB (large-v3 model)
-- **Accuracy**: High (large-v3 model provides best quality)
-- **Long recordings**: Optimized for 15-45 minute recordings with chunked processing
-
-### 24/7 Operation
-
-The application is optimized for continuous operation:
-
-- **Automatic memory management**: Monitors and cleans memory when threshold is exceeded
-- **Periodic cleanup**: Automatic memory cleanup every 10 transcriptions
-- **Model cache cleanup**: Model cache cleared every 50 transcriptions
-- **Error recovery**: Automatic memory cleanup and component reinitialization on errors
-- **Manual control**: Menu items "🧹 Clear Memory" and "💾 Memory Status"
-
-Configuration in `config.yaml`:
-
-```yaml
-performance:
-  auto_cleanup_enabled: true  # Automatic cleanup
-  cleanup_threshold_percent: 75  # Cleanup threshold (75% of limit)
-  periodic_cleanup_interval: 10  # Cleanup every N transcriptions
-```
-
-### Speed Testing
-
-Run transcription speed test:
-
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python test_transcription_speed.py
-```
-
-## Optimizations
-
-- Memory-efficient model loading
-- Chunked processing for long recordings (15-45 minutes)
-- Batch processing utilizing all 40 GPU cores on M4 Max
-- Automatic chunking with overlap for seamless text merging
-- Stream processing to minimize memory usage
-- Native MLX framework integration
-- Apple Silicon specific optimizations (M1/M2/M3/M4)
+You can also override settings with environment variables using the `VTT2_` prefix (see `.env.example`).
 
 ## Troubleshooting
 
-### Горячие клавиши не работают
+**Hotkey not working:**
+Add your terminal app to System Settings > Privacy & Security > Accessibility and Input Monitoring. Restart the app.
 
-Если горячие клавиши Option+Space не работают:
+**"Model not found" on first run:**
+The model downloads from Hugging Face on first use. Make sure you have internet for the initial download. After that, everything works offline.
 
-1. **Добавьте Terminal в Accessibility:**
-   - Системные настройки > Конфиденциальность > Управление компьютером
-   - Добавьте Terminal (или Python, если запускаете через другой способ)
-   - Перезапустите приложение
+**High memory usage:**
+Switch to a smaller model in `config.yaml` (see table above). Memory auto-cleanup is enabled by default.
 
-2. **Проверьте логи:**
-   ```bash
-   cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py
-   ```
-   Ищите сообщения:
-   - `✅ Горячие клавиши активированы` - все хорошо
-   - `⚠️ This process is not trusted!` - нужно добавить в Accessibility
-   - `🔥 Горячая клавиша нажата!` - горячие клавиши работают
+**Check everything at once:**
+```bash
+uv run python src/vtt2/main.py --health
+```
 
-3. **Проверьте разрешения:**
-   ```bash
-   cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py --health
-   ```
+## Logs
 
-### Автовставка не работает
+Logs are at `~/Library/Logs/vtt2/vtt2.log` (auto-rotated, 10 MB max).
 
-Если текст не вставляется автоматически:
+For verbose output: `uv run python src/vtt2/main.py --verbose`
 
-1. **Проверьте разрешение Accessibility** (см. выше)
-2. **Сохраните активное приложение перед записью:**
-   - Установите курсор в нужное место
-   - Запустите запись (Option+Space)
-   - Приложение автоматически сохранит активное окно
-3. **Проверьте логи** - должны быть сообщения о вставке текста
+## Supported languages
 
-See [main README](../../README.md) for general troubleshooting.
+Whisper supports 99 languages including English, Russian, Chinese, Japanese, Spanish, French, German, Arabic, Hindi, and many more. Set `language: "auto"` in config (default) and it detects automatically.
 
-## Documentation
+## License
 
-For detailed documentation, see the original [VoiceToText-MLX-M1-8Gb repository](https://github.com/FUYOH666/VoiceToText-MLX-M1-8Gb).
+MIT
 
 ---
 
-## 🇷🇺 Русская версия
-
-Приложение Voice-to-Text, оптимизированное для Apple Silicon с использованием фреймворка MLX Whisper.
-
-## 🚀 Быстрый запуск
-
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py
-```
-
-Для health check:
-
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py --health
-```
-
-## Возможности
-
-- ⚡ **Оптимизировано MLX** для Apple Silicon (M1/M2/M3/M4)
-- 🚀 **Высокая производительность** (~42x реального времени, протестировано на M4 Max)
-  - 5-минутная запись: ~6 секунд
-  - 15-минутная запись: ~20 секунд
-  - 45-минутная запись: ~1 минута
-- 💾 **Эффективное использование памяти** (~1.5GB для medium модели, ~3-4GB для large-v3)
-- 🔒 **100% офлайн** - интернет не требуется после первой загрузки модели
-- 🆓 **Полностью бесплатно** - API ключи не нужны
-- 🎯 **Оптимизировано для M4 Max** - поддержка длинных записей (15-45 минут) с моделью large-v3
-- 📦 **Обработка чанками** - автоматическое разбиение длинных записей с перекрытием
-- ⚙️ **Batch processing** - использует все 40 GPU cores на M4 Max
-- 🌍 **Автоопределение языка** - автоматически определяет язык (русский, китайский, английский и т.д.)
-- 🔄 **Работа 24/7** - автоматическое управление памятью и восстановление после ошибок для непрерывной работы
-
-## Требования
-
-- macOS с Apple Silicon (M1/M2/M3/M4)
-- Python 3.12+
-- Фреймворк MLX
-- Рекомендуется 8GB+ RAM (16GB+ для модели large-v3 на M4 Max)
-- Менеджер пакетов [uv](https://github.com/astral-sh/uv) (рекомендуется)
-
-## Установка
-
-Используя `uv` (рекомендуется):
-
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4
-uv sync
-```
-
-Или используя `pip`:
-
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4
-pip install -r requirements.txt
-```
-
-## Использование
-
-Быстрый запуск:
-
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py
-```
-
-Health check:
-
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python src/src/main.py --health
-```
-
-## Конфигурация
-
-Отредактируйте `config.yaml` для настройки:
-
-```yaml
-transcription:
-  mlx_whisper:
-    model_name: "mlx-community/whisper-large-v3-mlx"  # large-v3 для M4 Max
-    language: "auto"  # "auto" для автоопределения языка, или код языка: "ru", "en", "zh" (китайский), "ja" (японский) и т.д.
-    chunk_size_seconds: 30  # Размер чанка для длинных записей
-    chunk_overlap_seconds: 2  # Перекрытие между чанками
-    batch_size: 6  # Размер батча для параллельной обработки (оптимально для large-v3 на M4 Max)
-
-performance:
-  memory_limit_mb: 16384  # 16GB для M4 Max (128GB RAM)
-
-audio:
-  max_recording_duration: 7200  # 2 часа (поддержка записей 15-45 минут)
-```
-
-## Производительность
-
-- **Скорость**: ~42x реального времени (по результатам тестирования на M4 Max)
-  - 5-минутная запись: ~6 секунд
-  - 15-минутная запись: ~20 секунд
-  - 45-минутная запись: ~1 минута
-- **Память**: ~1.5GB (модель medium), ~3-4GB (модель large-v3)
-- **Точность**: Высокая (модель large-v3 обеспечивает лучшее качество)
-- **Длинные записи**: Оптимизировано для записей 15-45 минут с обработкой чанками
-
-### Долгая работа (24/7)
-
-Приложение оптимизировано для работы целыми сутками без перезапуска:
-
-- **Автоматическое управление памятью**: Мониторинг и очистка при превышении порога
-- **Периодическая очистка**: Каждые 10 транскрипций выполняется автоматическая очистка памяти
-- **Очистка кэша модели**: Каждые 50 транскрипций очищается кэш модели
-- **Восстановление после ошибок**: Автоматическая очистка памяти и переинициализация компонентов
-- **Ручное управление**: Пункты меню "🧹 Очистить память" и "💾 Статус памяти"
-
-Настройка в `config.yaml`:
-
-```yaml
-performance:
-  auto_cleanup_enabled: true  # Автоматическая очистка
-  cleanup_threshold_percent: 75  # Порог для очистки (75% от лимита)
-  periodic_cleanup_interval: 10  # Очистка каждые N транскрипций
-```
-
-### Тестирование скорости
-
-Запустите тест скорости транскрипции:
-
-```bash
-cd /Users/aleksandrmordvinov/development/VTT-MLX-m4 && uv run python test_transcription_speed.py
-```
-
-## Оптимизации
-
-- Эффективная загрузка моделей по памяти
-- Обработка чанками для длинных записей (15-45 минут)
-- Batch processing с использованием всех 40 GPU cores на M4 Max
-- Автоматическое разбиение на чанки с перекрытием для плавного объединения текста
-- Потоковая обработка для минимизации использования памяти
-- Нативная интеграция фреймворка MLX
-- Специфичные оптимизации Apple Silicon (M1/M2/M3/M4)
-
-## Устранение неполадок
-
-См. [главный README](../../README.md) для общей помощи.
-
-## Документация
-
-Подробная документация доступна в оригинальном [репозитории VoiceToText-MLX-M1-8Gb](https://github.com/FUYOH666/VoiceToText-MLX-M1-8Gb).
+Built with [MLX](https://github.com/ml-explore/mlx) by Apple.

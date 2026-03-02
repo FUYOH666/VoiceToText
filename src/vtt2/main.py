@@ -3,13 +3,13 @@ VTTv2 - Главное приложение
 Voice-to-Text для macOS с MLX Whisper
 """
 import sys
+import signal
 import argparse
 import threading
 import time
 from pathlib import Path
 import rumps
 
-# Импорт модулей
 from utils.logger import setup_logging
 from config.loader import Config
 from system.permissions import PermissionsChecker
@@ -19,6 +19,7 @@ from transcription.engine import TranscriptionEngineWrapper
 from system.text_injector import TextInjector
 from system.hotkeys import HotkeyManager
 from utils.memory_manager import MemoryManager
+from utils.pid_manager import acquire_pid_file, release_pid_file
 
 # Для выполнения в главном потоке
 try:
@@ -48,9 +49,10 @@ class VTT2App(rumps.App):
             log_file=config.logging.file
         )
         
-        # Состояние приложения
-        self.is_recording = False
-        self.is_processing = False
+        # Состояние приложения (thread-safe через Lock)
+        self._state_lock = threading.Lock()
+        self._is_recording = False
+        self._is_processing = False
         self.last_text = ""
         
         # Инициализация менеджера памяти для долгой работы
@@ -76,6 +78,26 @@ class VTT2App(rumps.App):
         
         self.logger.info("VTTv2 запущен")
     
+    @property
+    def is_recording(self):
+        with self._state_lock:
+            return self._is_recording
+
+    @is_recording.setter
+    def is_recording(self, value):
+        with self._state_lock:
+            self._is_recording = value
+
+    @property
+    def is_processing(self):
+        with self._state_lock:
+            return self._is_processing
+
+    @is_processing.setter
+    def is_processing(self, value):
+        with self._state_lock:
+            self._is_processing = value
+
     def _init_components(self):
         """Инициализация всех компонентов"""
         try:
@@ -91,6 +113,23 @@ class VTT2App(rumps.App):
                 mic_ok = permissions.check_microphone_permission(fail_fast=True)
             
             accessibility_ok = permissions.check_accessibility_permission(fail_fast=True)
+            
+            # Проверка Input Monitoring (требуется в macOS Sequoia 15+ для автовставки)
+            input_monitoring_ok = permissions.check_input_monitoring_permission(fail_fast=False)
+            if not input_monitoring_ok:
+                self.logger.warning("⚠️ Разрешение Input Monitoring не предоставлено")
+                self.logger.warning("⚠️ Автовставка может не работать")
+                self.logger.warning("⚠️ Перейдите в Системные настройки > Конфиденциальность и безопасность > Мониторинг ввода")
+                # Не завершаем приложение, но предупреждаем пользователя
+                if self.config.ui.auto_paste_enabled:
+                    rumps.alert(
+                        "Требуется разрешение",
+                        "Для автовставки текста требуется разрешение 'Мониторинг ввода'.\n\n"
+                        "Перейдите в:\n"
+                        "Системные настройки > Конфиденциальность и безопасность > Мониторинг ввода\n\n"
+                        "Добавьте Terminal или это приложение в список разрешенных.",
+                        ok="Понятно"
+                    )
             
             # Инициализация сервисов
             self.audio_recorder = AudioRecorder(self.config)
@@ -402,7 +441,7 @@ class VTT2App(rumps.App):
             accessibility_ok = permissions.check_accessibility_permission()
             checks.append(f"Микрофон: {'✅' if mic_ok else '❌'}")
             checks.append(f"Accessibility: {'✅' if accessibility_ok else '❌'}")
-        except:
+        except Exception:
             checks.append("Разрешения: ❌")
         
         # Проверка компонентов
@@ -559,50 +598,76 @@ def health_check_command(config_path: str = "config.yaml"):
         return 0  # Возвращаем 0, так как это не критично для health check
 
 
+def _resolve_project_root(config_path: str) -> Path:
+    """Resolve project root directory based on config file location."""
+    project_root = Path.cwd()
+    if (project_root / config_path).exists():
+        return project_root
+    # Fallback: relative to this source file
+    return Path(__file__).parent.parent.parent
+
+
 def main():
-    """Главная функция"""
+    """Main entry point."""
     parser = argparse.ArgumentParser(description="VTTv2 - Voice-to-Text для macOS")
-    parser.add_argument(
-        '--health',
-        action='store_true',
-        help='Выполнить health check'
-    )
-    parser.add_argument(
-        '--config',
-        default='config.yaml',
-        help='Путь к config.yaml'
-    )
-    
+    parser.add_argument("--health", action="store_true", help="Run health check")
+    parser.add_argument("--config", default="config.yaml", help="Path to config.yaml")
+    parser.add_argument("--verbose", action="store_true", help="Enable DEBUG logging")
+    parser.add_argument("--install", action="store_true", help="Install as launchd service")
+    parser.add_argument("--uninstall", action="store_true", help="Uninstall launchd service")
+    parser.add_argument("--status", action="store_true", help="Show service status")
+
     args = parser.parse_args()
-    
+
+    # Service management commands (no config needed)
+    if args.install or args.uninstall or args.status:
+        from service import install_service, uninstall_service, service_status
+        if args.install:
+            return install_service()
+        elif args.uninstall:
+            return uninstall_service()
+        else:
+            return service_status()
+
     if args.health:
         return health_check_command(args.config)
-    
-    # Обычный запуск приложения
-    project_root = Path.cwd()
-    if not (project_root / args.config).exists():
-        # Попробуем найти относительно src/
-        project_root = Path(__file__).parent.parent.parent
-    
+
+    # --- Normal app start ---
+    project_root = _resolve_project_root(args.config)
     config_file = project_root / args.config
-    
-    # Загрузка конфигурации
+
     try:
         config = Config.from_yaml(str(config_file), project_root)
     except Exception as e:
         print(f"Ошибка загрузки конфигурации: {e}")
         sys.exit(1)
-    
-    # Инициализация логирования
+
+    log_level = "DEBUG" if args.verbose else config.logging.level
     setup_logging(
-        level=config.logging.level,
+        level=log_level,
         format_string=config.logging.format,
-        log_file=config.logging.file
+        log_file=config.logging.file,
     )
-    
-    # Запуск приложения
+
+    # Single-instance guard
+    if not acquire_pid_file():
+        print("VTT2 already running. Use --status to check.")
+        sys.exit(1)
+
     app = VTT2App(config)
-    app.run()
+
+    # Graceful shutdown on SIGTERM (sent by launchctl stop)
+    def _handle_signal(signum, frame):
+        import logging
+        logging.getLogger("vtt2").info("Received signal %s, shutting down...", signum)
+        app.quit_app(None)
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+
+    try:
+        app.run()
+    finally:
+        release_pid_file()
 
 
 if __name__ == "__main__":

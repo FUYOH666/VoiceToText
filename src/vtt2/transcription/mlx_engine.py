@@ -57,11 +57,6 @@ class MLXWhisperTranscriber:
         self.batch_size = getattr(self.mlx_config, 'batch_size', 6)
         self.sample_rate = 16000  # MLX Whisper использует 16kHz
         
-        # Кэш модели для переиспользования между транскрипциями
-        self._model_cache = None
-        self._transcription_count = 0
-        
-        # Кэш модели для переиспользования между транскрипциями
         self._model_cache = None
         self._transcription_count = 0
         
@@ -436,7 +431,7 @@ class MLXWhisperTranscriber:
     
     def _merge_chunk_texts(self, texts: List[str], chunks: List[np.ndarray]) -> str:
         """
-        Объединение текстов из чанков с учетом перекрытий
+        Объединение текстов из чанков.
         
         Args:
             texts: Список текстов из чанков
@@ -447,22 +442,7 @@ class MLXWhisperTranscriber:
         """
         if not texts:
             return ""
-        
-        # Простое объединение с пробелами
-        # В будущем можно добавить более умное объединение с учетом перекрытий
-        merged = " ".join([text for text in texts if text.strip()])
-        
-        # Удаление дубликатов (простейший способ)
-        # Более сложная логика может анализировать перекрытия и удалять дубликаты
-        words = merged.split()
-        seen = set()
-        unique_words = []
-        for word in words:
-            if word.lower() not in seen:
-                seen.add(word.lower())
-                unique_words.append(word)
-        
-        return " ".join(unique_words)
+        return " ".join(text.strip() for text in texts if text.strip())
     
     def _clear_model_cache(self):
         """Очистка кэша модели для освобождения памяти"""

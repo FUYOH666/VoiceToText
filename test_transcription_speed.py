@@ -7,7 +7,7 @@ import time
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, 'src/src')
+sys.path.insert(0, 'src/vtt2')
 
 from config.loader import Config
 from transcription.mlx_engine import MLXWhisperTranscriber

@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.1.0] - 2026-03-02
+
+### Added
+- **launchd service**: `--install` / `--uninstall` / `--status` for auto-start on login and restart on crash
+- **PID file**: single-instance protection prevents duplicate processes
+- **Log rotation**: RotatingFileHandler (10 MB x 5 files) at ~/Library/Logs/vtt2/
+- **Signal handling**: graceful shutdown on SIGTERM (used by `launchctl stop`)
+- **`--verbose` flag**: enable DEBUG logging from CLI
+
+### Fixed
+- **Critical: chunk text merge** was removing duplicate words, corrupting transcription output
+- **Thread safety**: `is_recording` / `is_processing` flags now protected by `threading.Lock`
+- **ENV overrides** (`VTT2_` prefix) were parsed but never applied to config
+- **`/tmp` cleanup** was deleting files from system `/tmp` directory; now only cleans app cache
+- **Bare `except:`** in health_check replaced with `except Exception:`
+- **Duplicate `psutil`** dependency (>=5.9.0 and >=7.0.0) consolidated to >=7.0.0
+- **Duplicate initialization** of `_model_cache` / `_transcription_count` in MLXWhisperTranscriber
+
+### Changed
+- **Project structure**: `src/src/` renamed to `src/vtt2/`, `tests/tests/` flattened to `tests/`
+- **Log file default**: logs now written to `~/Library/Logs/vtt2/vtt2.log` (was console-only)
+- **README**: rewritten with correct paths, service setup, and architecture docs
+- Deleted legacy `requirements.txt` (uv uses `pyproject.toml` + `uv.lock`)
+- `uv.lock` now committed to repository (was in .gitignore)
+
 ## [1.0.1] - 2025-11-24
 
 ### Fixed

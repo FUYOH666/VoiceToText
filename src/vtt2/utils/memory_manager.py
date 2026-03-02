@@ -119,7 +119,6 @@ class MemoryManager:
         """
         if temp_dirs is None:
             temp_dirs = [
-                Path("/tmp"),
                 Path.home() / ".cache" / "vtt-mlx-m4",
             ]
         

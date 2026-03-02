@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "vtt2"))
 
 
 class TestPermissionsChecker:
@@ -15,7 +15,7 @@ class TestPermissionsChecker:
     @patch('AVFoundation.AVAudioSession')
     def test_microphone_permission_granted(self, mock_av_session_class):
         """Тест проверки разрешения на микрофон (предоставлено)"""
-        from src.system.permissions import PermissionsChecker
+        from system.permissions import PermissionsChecker
         
         # Мокируем AVAudioSession
         mock_session = MagicMock()
@@ -30,7 +30,7 @@ class TestPermissionsChecker:
     @patch('AVFoundation.AVAudioSession')
     def test_microphone_permission_denied(self, mock_av_session_class):
         """Тест проверки разрешения на микрофон (отклонено)"""
-        from src.system.permissions import PermissionsChecker
+        from system.permissions import PermissionsChecker
         
         mock_session = MagicMock()
         mock_session.recordPermission.return_value = 1735552629  # Denied
@@ -41,10 +41,10 @@ class TestPermissionsChecker:
         
         assert result is False
     
-    @patch('src.system.permissions.CGEventSourceKeyState')
+    @patch('system.permissions.CGEventSourceKeyState')
     def test_accessibility_permission_granted(self, mock_cg_event):
         """Тест проверки разрешения Accessibility (предоставлено)"""
-        from src.system.permissions import PermissionsChecker
+        from system.permissions import PermissionsChecker
         
         # Мокируем CGEventSourceKeyState - если работает без ошибки, разрешение есть
         mock_cg_event.return_value = True
@@ -54,10 +54,10 @@ class TestPermissionsChecker:
         
         assert result is True
     
-    @patch('src.system.permissions.CGEventSourceKeyState')
+    @patch('system.permissions.CGEventSourceKeyState')
     def test_accessibility_permission_denied(self, mock_cg_event):
         """Тест проверки разрешения Accessibility (отклонено)"""
-        from src.system.permissions import PermissionsChecker
+        from system.permissions import PermissionsChecker
         
         # Мокируем CGEventSourceKeyState - если выбросит исключение, разрешения нет
         mock_cg_event.side_effect = Exception("Accessibility permission denied")
@@ -70,7 +70,7 @@ class TestPermissionsChecker:
     @patch('AVFoundation.AVAudioSession')
     def test_microphone_permission_fail_fast(self, mock_av_session_class):
         """Тест fail_fast режима для микрофона"""
-        from src.system.permissions import PermissionsChecker
+        from system.permissions import PermissionsChecker
         
         mock_session = MagicMock()
         mock_session.recordPermission.return_value = 1735552629  # Denied

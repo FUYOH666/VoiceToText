@@ -7,8 +7,8 @@ import yaml
 from pathlib import Path
 import sys
 
-# Добавляем src в путь для импортов
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Добавляем пакет vtt2 в путь для импортов (чтобы работали from config.loader, from utils.logger и т.д.)
+sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "vtt2"))
 
 # Мокируем mlx_whisper модуль ДО импорта других модулей если он не установлен
 try:

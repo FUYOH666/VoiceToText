@@ -214,25 +214,55 @@ class TextInjector:
             logger.debug("Отправка событий клавиатуры Cmd+V...")
             
             # Отправка событий в правильном порядке
-            # Используем kCGSessionEventTap для глобальной вставки
-            CGEventPost(kCGSessionEventTap, cmd_down)
-            time.sleep(0.05)  # Увеличена задержка между событиями
-            CGEventPost(kCGSessionEventTap, v_down)
-            time.sleep(0.15)  # Увеличена задержка для обработки вставки
-            CGEventPost(kCGSessionEventTap, v_up)
-            time.sleep(0.05)
-            CGEventPost(kCGSessionEventTap, cmd_up)
+            # Пробуем сначала kCGAnnotatedSessionEventTap (более надежно в macOS Sequoia+)
+            # Если не работает, fallback на kCGSessionEventTap
+            event_tap = None
+            try:
+                # Пробуем использовать AnnotatedSession (требует Input Monitoring в Sequoia+)
+                CGEventPost(kCGAnnotatedSessionEventTap, cmd_down)
+                event_tap = kCGAnnotatedSessionEventTap
+                logger.debug("Используем kCGAnnotatedSessionEventTap для отправки событий")
+            except Exception as e:
+                logger.debug(f"kCGAnnotatedSessionEventTap не доступен: {e}, пробуем kCGSessionEventTap")
+                try:
+                    CGEventPost(kCGSessionEventTap, cmd_down)
+                    event_tap = kCGSessionEventTap
+                    logger.debug("Используем kCGSessionEventTap для отправки событий")
+                except Exception as e2:
+                    logger.error(f"Не удалось отправить события через CGEventPost: {e2}")
+                    logger.error("⚠️ Возможно, требуется разрешение Input Monitoring")
+                    logger.error("Перейдите в Системные настройки > Конфиденциальность и безопасность > Мониторинг ввода")
+                    raise
             
-            # Небольшая задержка для проверки результата
-            time.sleep(0.2)
-            
-            logger.info("✅ События Cmd+V отправлены через CGEvent")
-            return True
+            if event_tap:
+                # Отправляем остальные события через выбранный event tap
+                CGEventPost(event_tap, cmd_down)
+                time.sleep(0.05)  # Задержка между событиями
+                CGEventPost(event_tap, v_down)
+                time.sleep(0.15)  # Задержка для обработки вставки
+                CGEventPost(event_tap, v_up)
+                time.sleep(0.05)
+                CGEventPost(event_tap, cmd_up)
+                
+                # Небольшая задержка для проверки результата
+                time.sleep(0.2)
+                
+                logger.info("✅ События Cmd+V отправлены через CGEvent")
+                return True
+            else:
+                raise Exception("Не удалось определить доступный event tap")
             
         except Exception as e:
+            error_msg = str(e)
             logger.error(f"Ошибка вставки через CGEvent: {e}")
             import traceback
             logger.debug(traceback.format_exc())
+            
+            # Проверяем, связана ли ошибка с разрешениями
+            if "permission" in error_msg.lower() or "access" in error_msg.lower() or "denied" in error_msg.lower():
+                logger.error("⚠️ Похоже, проблема с разрешениями Input Monitoring")
+                logger.error("⚠️ Перейдите в Системные настройки > Конфиденциальность и безопасность > Мониторинг ввода")
+            
             # Fallback на clipboard
             return False
     
@@ -376,24 +406,40 @@ class TextInjector:
             cmd_key = 0x37
             v_key = 0x09
             
+            # Определяем доступный event tap
+            event_tap = None
+            try:
+                cmd_down = CGEventCreateKeyboardEvent(None, cmd_key, True)
+                CGEventSetFlags(cmd_down, kCGEventFlagMaskCommand)
+                # Пробуем сначала AnnotatedSession
+                try:
+                    CGEventPost(kCGAnnotatedSessionEventTap, cmd_down)
+                    event_tap = kCGAnnotatedSessionEventTap
+                except Exception:
+                    CGEventPost(kCGSessionEventTap, cmd_down)
+                    event_tap = kCGSessionEventTap
+            except Exception as e:
+                logger.error(f"Не удалось определить event tap для прямой типизации: {e}")
+                return False
+            
             # Отправляем события с большими задержками
             cmd_down = CGEventCreateKeyboardEvent(None, cmd_key, True)
             CGEventSetFlags(cmd_down, kCGEventFlagMaskCommand)
-            CGEventPost(kCGSessionEventTap, cmd_down)
+            CGEventPost(event_tap, cmd_down)
             time.sleep(0.1)
             
             v_down = CGEventCreateKeyboardEvent(None, v_key, True)
             CGEventSetFlags(v_down, kCGEventFlagMaskCommand)
-            CGEventPost(kCGSessionEventTap, v_down)
+            CGEventPost(event_tap, v_down)
             time.sleep(0.2)
             
             v_up = CGEventCreateKeyboardEvent(None, v_key, False)
             CGEventSetFlags(v_up, kCGEventFlagMaskCommand)
-            CGEventPost(kCGSessionEventTap, v_up)
+            CGEventPost(event_tap, v_up)
             time.sleep(0.05)
             
             cmd_up = CGEventCreateKeyboardEvent(None, cmd_key, False)
-            CGEventPost(kCGSessionEventTap, cmd_up)
+            CGEventPost(event_tap, cmd_up)
             
             logger.info(f"✅ Отправлено Cmd+V через прямую типизацию")
             time.sleep(0.2)  # Задержка для завершения
