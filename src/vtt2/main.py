@@ -317,7 +317,8 @@ class VTT2App(rumps.App):
                     self.logger.info(f"Периодическая очистка памяти после {self._transcription_count} транскрипций")
                     self.memory_manager.cleanup_memory()
                 else:
-                    # Легкая очистка после каждой транскрипции (проверка порога)
+                    # Лёгкая очистка после каждой транскрипции — gc.collect() для предотвращения накопления
+                    self.memory_manager.light_cleanup()
                     self.memory_manager.monitor_and_cleanup_if_needed("после транскрипции")
             
             if not text or not text.strip():
@@ -503,10 +504,25 @@ class VTT2App(rumps.App):
             if hasattr(self, 'memory_manager'):
                 self.memory_manager.cleanup_memory()
                 self.memory_manager.cleanup_temp_files()
-            
+
+            # Остановка горячих клавиш с таймаутом (защита от зависания pynput)
             if hasattr(self, 'hotkey_manager'):
-                self.hotkey_manager.stop()
-            
+                HOTKEY_STOP_TIMEOUT = 2.0
+
+                def stop_hotkeys():
+                    try:
+                        self.hotkey_manager.stop()
+                    except Exception as e:
+                        self.logger.debug(f"Ошибка при остановке горячих клавиш: {e}")
+
+                stop_thread = threading.Thread(target=stop_hotkeys, daemon=True)
+                stop_thread.start()
+                stop_thread.join(timeout=HOTKEY_STOP_TIMEOUT)
+                if stop_thread.is_alive():
+                    self.logger.warning(
+                        f"Остановка горячих клавиш заняла >{HOTKEY_STOP_TIMEOUT:.0f}с, выходим принудительно"
+                    )
+
             if hasattr(self, 'audio_recorder'):
                 self.audio_recorder.cleanup()
         except Exception as e:

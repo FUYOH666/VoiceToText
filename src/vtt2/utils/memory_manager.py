@@ -150,6 +150,13 @@ class MemoryManager:
         if cleaned_count > 0:
             logger.info(f"✅ Очищено {cleaned_count} временных файлов")
     
+    def light_cleanup(self):
+        """
+        Лёгкая очистка — принудительный gc.collect() без логирования.
+        Вызывается после каждой транскрипции для предотвращения накопления памяти.
+        """
+        gc.collect()
+
     def monitor_and_cleanup_if_needed(self, context: str = ""):
         """
         Мониторинг памяти и автоматическая очистка при необходимости
