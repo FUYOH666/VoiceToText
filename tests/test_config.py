@@ -27,7 +27,7 @@ class TestConfigLoader:
         if config_file.exists():
             config = Config.from_yaml(str(config_file), project_root)
             assert config.app.version is not None
-            assert config.transcription.engine in ["mlx_whisper", "whisper_cpp"]
+            assert config.transcription.engine in ["mlx_whisper", "whisper_cpp", "remote_asr"]
     
     def test_invalid_config_missing_field(self, project_root):
         """Тест обработки конфигурации с отсутствующими обязательными полями"""
@@ -77,7 +77,7 @@ class TestConfigLoader:
         config = MLXWhisperConfig()
         
         assert config.model_name == "mlx-community/whisper-medium"
-        assert config.language == "ru"
+        assert config.language == "auto"
         assert config.temperature == 0.0
         assert config.beam_size == 5
     

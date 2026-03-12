@@ -28,6 +28,24 @@ class MLXWhisperConfig(BaseModel):
     batch_size: int = Field(6, ge=1, le=24, description="Размер батча для параллельной обработки чанков")
 
 
+class RemoteASRConfig(BaseModel):
+    """Конфигурация удалённого ASR (LocalAI-compatible, доступ через Tailscale)"""
+    host: str = Field(
+        "localhost",
+        description="Хост ASR (Tailscale IP или localhost)",
+    )
+    port: int = Field(8001, ge=1, le=65535, description="Порт ASR-сервера")
+    path: str = Field(
+        "/v1/audio/transcriptions",
+        description="Путь к эндпоинту (LocalAI: /v1/audio/transcriptions)",
+    )
+    model: str = Field(
+        "cstr/whisper-large-v3-turbo-int8_float32",
+        description="Модель ASR на сервере",
+    )
+    timeout_seconds: int = Field(60, ge=5, le=300, description="Таймаут запроса (секунды)")
+
+
 class WhisperCppConfig(BaseModel):
     """Конфигурация whisper.cpp"""
     binary_path: str = Field(..., description="Путь к бинарнику whisper")
@@ -46,18 +64,22 @@ class WhisperCppConfig(BaseModel):
 
 class TranscriptionConfig(BaseModel):
     """Конфигурация транскрипции"""
-    engine: Literal["whisper_cpp", "mlx_whisper"] = Field("mlx_whisper", description="Движок транскрипции")
+    engine: Literal["whisper_cpp", "mlx_whisper", "remote_asr"] = Field(
+        "mlx_whisper", description="Движок транскрипции"
+    )
     whisper_cpp: Optional[WhisperCppConfig] = Field(None, description="Настройки whisper.cpp")
     mlx_whisper: Optional[MLXWhisperConfig] = Field(None, description="Настройки MLX Whisper")
-    
+    remote_asr: Optional[RemoteASRConfig] = Field(None, description="Настройки удалённого ASR")
+
     @model_validator(mode='after')
     def validate_engine_config(self):
         """Проверка что конфигурация движка соответствует выбранному движку"""
         if self.engine == "whisper_cpp" and not self.whisper_cpp:
             raise ValueError("whisper_cpp движок требует whisper_cpp конфигурацию")
         if self.engine == "mlx_whisper" and not self.mlx_whisper:
-            # Создаем дефолтную конфигурацию если не указана
             self.mlx_whisper = MLXWhisperConfig()
+        if self.engine == "remote_asr" and not self.remote_asr:
+            self.remote_asr = RemoteASRConfig()
         return self
 
 

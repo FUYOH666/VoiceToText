@@ -1,17 +1,37 @@
 # VTT MLX
 
-**Voice-to-text that runs entirely on your Mac.** No cloud, no subscription, no internet after setup.
+**Voice-to-text on your Mac.** Local or remote — your choice.
 
 Press **Option+Space**, speak, and the transcribed text appears where your cursor is.
+
+**Two modes:**
+
+| Mode | RAM on Mac | Where it runs |
+|------|------------|---------------|
+| `mlx_whisper` (local) | ~3.5 GB | Your Mac (Apple Silicon) |
+| `remote_asr` | **~120 MB** | Linux GPU server via Tailscale |
+
+With `remote_asr`, the model runs on your server — Mac stays light. Lazy imports ensure MLX is never loaded when using remote.
+
+**Switch mode:**
+
+```bash
+# Local on Mac (default)
+VTT2_TRANSCRIPTION_ENGINE=mlx_whisper uv run python src/vtt2/main.py
+
+# Remote via Tailscale — saves ~3 GB RAM
+VTT2_TRANSCRIPTION_ENGINE=remote_asr uv run python src/vtt2/main.py
+```
 
 ## How it works
 
 1. Press **Option+Space** to start recording
-2. Speak (any language -- auto-detected)
+2. Speak (any language — auto-detected)
 3. Press **Option+Space** again to stop
-4. Text is transcribed locally and pasted into the active app
+4. Text is transcribed and pasted into the active app
 
-Powered by [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) on Apple Silicon. Runs ~42x faster than real-time on M4 Max.
+**Local mode:** [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) on Apple Silicon — ~42x faster than real-time on M4 Max.  
+**Remote mode:** Whisper on your Linux GPU server via Tailscale.
 
 ## Requirements
 
@@ -69,7 +89,37 @@ On first launch macOS will ask for three permissions. **All three are required:*
 
 If hotkeys don't work, add your terminal app (Terminal, iTerm, Cursor) to **Accessibility** and **Input Monitoring**, then restart the app.
 
-## Choose a model
+## Transcription engines
+
+**Local (default):** `mlx_whisper` — runs on your Mac, uses ~3.5 GB RAM + GPU.
+
+**Remote:** `remote_asr` — sends audio to a Linux GPU server via Tailscale. **~120 MB RAM** on Mac (model stays on server). Lazy imports: MLX is never loaded when using remote.
+
+To use remote ASR, set in `config.yaml`:
+
+```yaml
+transcription:
+  engine: remote_asr
+  remote_asr:
+    host: "YOUR_TAILSCALE_IP"  # Tailscale IP вашего сервера
+    port: 8001
+    path: "/v1/audio/transcriptions"
+    model: "cstr/whisper-large-v3-turbo-int8_float32"
+```
+
+Or override via env: `VTT2_TRANSCRIPTION_ENGINE=remote_asr`, `LOCAL_AI_ASR_BASE_URL=http://host:8001`.
+
+**Local setup (keep your IP private):** Do not commit your Tailscale IP. Use environment variables:
+
+```bash
+export VTT2_TRANSCRIPTION_ENGINE=remote_asr
+export VTT2_TRANSCRIPTION_REMOTE_ASR_HOST=100.x.x.x  # your Tailscale IP
+uv run python src/vtt2/main.py
+```
+
+For the launchd service, add `EnvironmentVariables` to `~/Library/LaunchAgents/ai.vtt2.plist` (see `--install`), or create a `.env` and source it before the service starts.
+
+## Choose a model (local MLX only)
 
 Edit `config.yaml` to pick a model that fits your Mac:
 
@@ -119,7 +169,8 @@ Add your terminal app to System Settings > Privacy & Security > Accessibility an
 The model downloads from Hugging Face on first use. Make sure you have internet for the initial download. After that, everything works offline.
 
 **High memory usage:**
-Switch to a smaller model in `config.yaml` (see table above). Memory auto-cleanup is enabled by default.
+- **Best option:** switch to `remote_asr` in `config.yaml` — drops from ~3.5 GB to ~120 MB (model runs on server).
+- Or use a smaller local model (see table above). Memory auto-cleanup is enabled by default.
 
 **Check everything at once:**
 ```bash

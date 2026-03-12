@@ -582,7 +582,17 @@ def health_check_command(config_path: str = "config.yaml"):
             checks["whisper_cpp"] = "✅"
         except Exception as e:
             checks["whisper_cpp"] = f"❌ {e}"
-    
+    elif engine_type == "remote_asr":
+        try:
+            from transcription.remote_asr import RemoteASRTranscriber
+            transcriber = RemoteASRTranscriber(config)
+            if transcriber._check_health():
+                checks["remote_asr"] = "✅"
+            else:
+                checks["remote_asr"] = "❌ ASR недоступен (проверьте Tailscale)"
+        except Exception as e:
+            checks["remote_asr"] = f"❌ {e}"
+
     # Вывод результатов
     print("\n=== Результаты Health Check ===")
     for check, status in checks.items():
