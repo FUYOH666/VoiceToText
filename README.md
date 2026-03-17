@@ -4,28 +4,28 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20MLX-lightgrey)](README.md)
 
-**Cross-platform Voice-to-Text application** with support for macOS, Linux, and Apple Silicon (MLX). Fully offline, private, and free.
+**Turn speech into text instantly — on your Mac, Linux server, or Apple Silicon. Fully offline, private, and free.**
 
-[🇷🇺 Русская версия](#русская-версия)
+---
 
-## 🌟 Features
+## The Problem
 
-- 🎤 **High-quality transcription** using Whisper models
-- 🔒 **100% offline** - no data leaves your device
-- 🆓 **Completely free** - no subscriptions or API keys
-- 🚀 **Fast performance** - optimized for each platform
-- 📱 **Multiple platforms** - choose the best version for your system
-- 🌍 **Multilingual support** - supports 99+ languages
+You type notes, emails, docs for hours. Your voice is 3x faster.
 
-## 📦 Platforms
+Cloud transcription costs $10–20/month and sends your data elsewhere. Built-in dictation is slow, unreliable, and doesn't work across all your devices.
 
-| Platform | Backend | Best For | Status |
-|----------|---------|----------|--------|
-| **macOS** | whisper.cpp + Core ML | macOS users, offline processing | ✅ Stable |
-| **Linux** | FasterWhisper (CPU/GPU) | Linux servers, GPU acceleration | ✅ Stable |
-| **MLX** | MLX Whisper | MacBook Air M1 8GB, Apple Silicon | ✅ Stable |
+## The Solution
 
-## 🚀 Quick Start
+VoiceToText runs on macOS, Linux, and Apple Silicon (MLX). Choose the platform that fits your setup — desktop, server, or MacBook. 99+ languages, auto-detected. No subscription, no API keys. Your data never leaves your device.
+
+## Results
+
+- **Before:** 5 min typing a 2-min voice note, or $20/mo for cloud ASR, or vendor lock-in
+- **After:** 2 min voice → instant text. ~10–15x real-time. 100% offline. Free.
+
+---
+
+## Quick Start
 
 ### macOS
 
@@ -57,33 +57,44 @@ python src/main.py
 
 📖 See [MLX Platform Documentation](platforms/mlx/README.md) for details.
 
-## 📚 Documentation
+---
 
-- 📊 [Platform Comparison](docs/PLATFORMS.md) - Compare features across platforms
-- 🍎 [macOS Guide](platforms/macos/README.md) - macOS installation and usage
-- 🐧 [Linux Guide](platforms/linux/README.md) - Linux installation and usage
-- ⚡ [MLX Guide](platforms/mlx/README.md) - MLX installation and usage
-- 🤝 [Contributing](CONTRIBUTING.md) - How to contribute
-- 📝 [Changelog](CHANGELOG.md) - Version history
+## Deploy This For Your Business
 
-## 🛠️ Requirements
+This is open-source. You can run it yourself.
 
-### macOS
-- macOS 12.0 or later
-- Python 3.12
-- Core ML support
+Or I can deploy, customize, and integrate it for your team — custom voice workflows, enterprise integrations, deployment on your infrastructure.
 
-### Linux
-- Linux (any distribution)
-- Python 3.12
-- CUDA (optional, for GPU acceleration)
+→ **Email:** iamfuyoh@gmail.com  
+→ **Telegram:** [@ScanovichAI](https://t.me/ScanovichAI)
 
-### MLX
-- macOS with Apple Silicon (M1/M2/M3)
-- Python 3.12
-- MLX framework
+---
 
-## 📊 Performance
+## Tech Stack
+
+### Platforms
+
+| Platform | Backend | Best For | Status |
+|----------|---------|----------|--------|
+| **macOS** | whisper.cpp + Core ML | macOS users, offline processing | ✅ Stable |
+| **Linux** | FasterWhisper (CPU/GPU) | Linux servers, GPU acceleration | ✅ Stable |
+| **MLX** | MLX Whisper | MacBook Air M1 8GB, Apple Silicon | ✅ Stable |
+
+### Features
+
+- 🎤 **High-quality transcription** using Whisper models
+- 🔒 **100% offline** — no data leaves your device
+- 🆓 **Completely free** — no subscriptions or API keys
+- 🚀 **Fast performance** — optimized for each platform
+- 🌍 **Multilingual support** — 99+ languages
+
+### Requirements
+
+**macOS:** macOS 12.0+, Python 3.12, Core ML  
+**Linux:** Any distro, Python 3.12, CUDA (optional for GPU)  
+**MLX:** Apple Silicon (M1/M2/M3), Python 3.12, MLX framework
+
+### Performance
 
 | Platform | Speed | Memory | GPU Support |
 |----------|-------|--------|-------------|
@@ -91,154 +102,66 @@ python src/main.py
 | Linux | ~15x real-time | Medium | CUDA |
 | MLX | ~12x real-time | Low | MLX |
 
-## 🎯 Use Cases
+### Use Cases
 
-- 📝 **Transcription** - Convert audio to text
-- 🎙️ **Voice notes** - Record and transcribe voice memos
-- 📞 **Call transcription** - Transcribe phone calls
-- 🎬 **Video subtitles** - Generate subtitles for videos
-- 📚 **Accessibility** - Make audio content accessible
+- 📝 **Transcription** — Convert audio to text
+- 🎙️ **Voice notes** — Record and transcribe voice memos
+- 📞 **Call transcription** — Transcribe phone calls
+- 🎬 **Video subtitles** — Generate subtitles for videos
+- 📚 **Accessibility** — Make audio content accessible
 
-## 🤝 Contributing
+### Documentation
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+- 📊 [Platform Comparison](docs/PLATFORMS.md) — Compare features across platforms
+- 🍎 [macOS Guide](platforms/macos/README.md) — macOS installation and usage
+- 🐧 [Linux Guide](platforms/linux/README.md) — Linux installation and usage
+- ⚡ [MLX Guide](platforms/mlx/README.md) — MLX installation and usage
+- 🤝 [Contributing](CONTRIBUTING.md) — How to contribute
+- 📝 [Changelog](CHANGELOG.md) — Version history
 
-## 📝 License
+### License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License — see [LICENSE](LICENSE) for details.
 
-## 🔗 Related Projects
+### Related Projects
 
-- [Cleaner-OS](https://github.com/FUYOH666/Cleaner-OS) - System cleanup tool
-- [telegram-ai](https://github.com/FUYOH666/telegram-ai) - AI platform for Telegram
-- [Scanovich.ai-audio-call](https://github.com/FUYOH666/Scanovich.ai-audio-call) - Call analysis system
+- [Cleaner-OS](https://github.com/FUYOH666/Cleaner-OS) — System cleanup tool
+- [telegram-ai](https://github.com/FUYOH666/telegram-ai) — AI platform for Telegram
+- [Scanovich.ai-audio-call](https://github.com/FUYOH666/Scanovich.ai-audio-call) — Call analysis system
 
-## 👤 Author
+### Author
 
-**Aleksandr Mordvinov**
-- 💬 Telegram: [@ScanovichAI](https://t.me/ScanovichAI)
-- 🌐 Website: [scanovich.ai](https://scanovich.ai)
+**Aleksandr Mordvinov**  
+💬 Telegram: [@ScanovichAI](https://t.me/ScanovichAI)  
+🌐 Website: [scanovich.ai](https://scanovich.ai)
 
 ---
 
 ## 🇷🇺 Русская версия
 
-**Кроссплатформенное приложение Voice-to-Text** с поддержкой macOS, Linux и Apple Silicon (MLX). Полностью офлайн, приватно и бесплатно.
+**Превращайте речь в текст мгновенно** — на Mac, Linux-сервере или Apple Silicon. Полностью офлайн, приватно и бесплатно.
 
-## 🌟 Возможности
+### Проблема
 
-- 🎤 **Высококачественная транскрипция** с использованием моделей Whisper
-- 🔒 **100% офлайн** - данные не покидают ваше устройство
-- 🆓 **Полностью бесплатно** - без подписок и API ключей
-- 🚀 **Высокая производительность** - оптимизировано для каждой платформы
-- 📱 **Несколько платформ** - выберите лучшую версию для вашей системы
-- 🌍 **Многоязычная поддержка** - поддерживает 99+ языков
+Вы часами печатаете заметки, письма, документы. Голос в 3 раза быстрее.
 
-## 📦 Платформы
+Облачная транскрипция стоит $10–20/мес и отправляет ваши данные на сторону. Встроенный диктант медленный, ненадёжный и не работает на всех устройствах.
 
-| Платформа | Backend | Лучше для | Статус |
-|-----------|---------|-----------|--------|
-| **macOS** | whisper.cpp + Core ML | Пользователи macOS, офлайн обработка | ✅ Стабильно |
-| **Linux** | FasterWhisper (CPU/GPU) | Linux серверы, GPU ускорение | ✅ Стабильно |
-| **MLX** | MLX Whisper | MacBook Air M1 8GB, Apple Silicon | ✅ Стабильно |
+### Решение
 
-## 🚀 Быстрый старт
+VoiceToText работает на macOS, Linux и Apple Silicon (MLX). Выберите платформу под вашу задачу — десктоп, сервер или MacBook. 99+ языков, автоопределение. Без подписки и API-ключей. Данные не покидают ваше устройство.
 
-### macOS
+### Результаты
 
-```bash
-cd platforms/macos
-pip install -r requirements.txt
-python src/main.py
-```
+- **Было:** 5 мин набора 2-минутной голосовой заметки, или $20/мес за облачный ASR
+- **Стало:** 2 мин голоса → мгновенный текст. ~10–15x реального времени. 100% офлайн. Бесплатно.
 
-📖 Подробности в [документации macOS](platforms/macos/README.md).
+### Быстрый старт
 
-### Linux
-
-```bash
-cd platforms/linux
-./install.sh
-# Следуйте инструкциям для вашей платформы
-```
-
-📖 Подробности в [документации Linux](platforms/linux/README.md).
-
-### MLX (Apple Silicon)
-
-```bash
-cd platforms/mlx
-pip install -r requirements.txt
-python src/main.py
-```
-
-📖 Подробности в [документации MLX](platforms/mlx/README.md).
-
-## 📚 Документация
-
-- 📊 [Сравнение платформ](docs/PLATFORMS.md) - Сравнение функций платформ
-- 🍎 [Руководство macOS](platforms/macos/README.md) - Установка и использование macOS
-- 🐧 [Руководство Linux](platforms/linux/README.md) - Установка и использование Linux
-- ⚡ [Руководство MLX](platforms/mlx/README.md) - Установка и использование MLX
-- 🤝 [Участие в разработке](CONTRIBUTING.md) - Как внести вклад
-- 📝 [История изменений](CHANGELOG.md) - История версий
-
-## 🛠️ Требования
-
-### macOS
-- macOS 12.0 или новее
-- Python 3.12
-- Поддержка Core ML
-
-### Linux
-- Linux (любой дистрибутив)
-- Python 3.12
-- CUDA (опционально, для GPU ускорения)
-
-### MLX
-- macOS с Apple Silicon (M1/M2/M3)
-- Python 3.12
-- Фреймворк MLX
-
-## 📊 Производительность
-
-| Платформа | Скорость | Память | Поддержка GPU |
-|-----------|----------|--------|---------------|
-| macOS | ~10x реального времени | Низкая | Core ML |
-| Linux | ~15x реального времени | Средняя | CUDA |
-| MLX | ~12x реального времени | Низкая | MLX |
-
-## 🎯 Применение
-
-- 📝 **Транскрипция** - Преобразование аудио в текст
-- 🎙️ **Голосовые заметки** - Запись и транскрипция голосовых мемо
-- 📞 **Транскрипция звонков** - Транскрипция телефонных звонков
-- 🎬 **Субтитры для видео** - Генерация субтитров для видео
-- 📚 **Доступность** - Сделать аудио контент доступным
-
-## 🤝 Участие в разработке
-
-Вклад приветствуется! См. [CONTRIBUTING.md](CONTRIBUTING.md) для руководства.
-
-## 📝 Лицензия
-
-MIT License - см. файл [LICENSE](LICENSE) для деталей.
-
-## 🔗 Связанные проекты
-
-- [Cleaner-OS](https://github.com/FUYOH666/Cleaner-OS) - Инструмент очистки системы
-- [telegram-ai](https://github.com/FUYOH666/telegram-ai) - AI платформа для Telegram
-- [Scanovich.ai-audio-call](https://github.com/FUYOH666/Scanovich.ai-audio-call) - Система анализа звонков
-
-## 👤 Автор
-
-**Александр Мордвинов**
-- 💬 Telegram: [@ScanovichAI](https://t.me/ScanovichAI)
-- 🌐 Сайт: [scanovich.ai](https://scanovich.ai)
+См. [Quick Start](#quick-start) выше. Документация: [docs/PLATFORMS.md](docs/PLATFORMS.md).
 
 ---
 
 ⭐️ *If you find this project useful, please consider giving it a star!*
 
 *Если проект вам полезен, пожалуйста, поставьте звезду!*
-
