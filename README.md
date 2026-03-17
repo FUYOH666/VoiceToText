@@ -87,7 +87,9 @@ If hotkeys don't work, add your terminal app (Terminal, iTerm, Cursor) to **Acce
 
 This is open-source. You can run it yourself.
 
-Or I can deploy, customize, and integrate it for your team — custom voice workflows, enterprise integrations, deployment on your infrastructure.
+Or I can deploy, customize, and integrate it for your team in **2 weeks** — custom voice workflows, enterprise integrations, deployment on your infrastructure.
+
+**Fixed price: $2,000** — includes setup, customization, deployment, and 30 days of support.
 
 → **Email:** iamfuyoh@gmail.com  
 → **Telegram:** [@ScanovichAI](https://t.me/ScanovichAI)
