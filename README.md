@@ -89,7 +89,7 @@ This is open-source. You can run it yourself.
 
 Or I can deploy, customize, and integrate it for your team in **2 weeks** — custom voice workflows, enterprise integrations, deployment on your infrastructure.
 
-**Fixed price: $2,000** — includes setup, customization, deployment, and 30 days of support.
+**Free consultation** — tell me your use case, I'll tell you if it fits and how fast we can move.
 
 → **Email:** iamfuyoh@gmail.com  
 → **Telegram:** [@ScanovichAI](https://t.me/ScanovichAI)
