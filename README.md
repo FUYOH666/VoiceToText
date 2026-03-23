@@ -141,15 +141,15 @@ transcription:
 
 Or override via env: `VTT2_TRANSCRIPTION_ENGINE=remote_asr`, `LOCAL_AI_ASR_BASE_URL=http://host:8001`.
 
-**Local setup (keep your IP private):** Do not commit your Tailscale IP. Use environment variables:
+**Local setup (keep your IP private):** Create `.env.vtt2` (gitignored) before running `--install`. The service will inject these into the launchd plist:
 
 ```bash
-export VTT2_TRANSCRIPTION_ENGINE=remote_asr
-export VTT2_TRANSCRIPTION_REMOTE_ASR_HOST=100.x.x.x  # your Tailscale IP
-uv run python src/vtt2/main.py
+# .env.vtt2 (copy from .env.vtt2.example)
+VTT2_TRANSCRIPTION_ENGINE=remote_asr
+LOCAL_AI_ASR_BASE_URL=http://100.x.x.x:8001
 ```
 
-For the launchd service, add `EnvironmentVariables` to `~/Library/LaunchAgents/ai.vtt2.plist` (see `--install`), or create a `.env` and source it before the service starts.
+Then run `uv run python src/vtt2/main.py --install`. After reboot, VTT will use your server automatically.
 
 ### Choose a model (local MLX only)
 
@@ -197,6 +197,8 @@ You can also override settings with environment variables using the `VTT2_` pref
 **Hotkey not working:**
 Add your terminal app to System Settings > Privacy & Security > Accessibility and Input Monitoring. Restart the app.
 
+**Hotkey stopped responding after recording (stuck):** Restart the service: `launchctl unload ~/Library/LaunchAgents/ai.vtt2.plist && launchctl load ~/Library/LaunchAgents/ai.vtt2.plist`. If a zombie process remains, kill it in Activity Monitor (`python … main.py`) or `pkill -9 -f vtt2/main.py`, remove `~/.local/state/vtt2/vtt2.pid`, then load again. (v1.2.1+ uses a safer audio stop to reduce this.)
+
 **"Model not found" on first run:**
 The model downloads from Hugging Face on first use. Make sure you have internet for the initial download. After that, everything works offline.
 
@@ -211,7 +213,7 @@ uv run python src/vtt2/main.py --health
 
 ### Logs
 
-Logs are at `~/Library/Logs/vtt2/vtt2.log` (auto-rotated, 10 MB max).
+Logs are at `~/Library/Logs/vtt2/` (`vtt2.stdout.log`, `vtt2.stderr.log`, `vtt2.log`).
 
 For verbose output: `uv run python src/vtt2/main.py --verbose`
 

@@ -39,6 +39,8 @@
     <key>StandardErrorPath</key>
     <string>__HOME__/Library/Logs/vtt2/vtt2.stderr.log</string>
 
+__ENV_VARS_XML__
+
     <key>ProcessType</key>
     <string>Interactive</string>
 </dict>

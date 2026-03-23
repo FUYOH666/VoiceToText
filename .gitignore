@@ -67,3 +67,6 @@ test_outputs/
 # Local config overrides (if any)
 config.local.yaml
 
+# Service env (Tailscale IP etc.) — не коммитить
+.env.vtt2
+

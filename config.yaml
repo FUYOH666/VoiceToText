@@ -6,7 +6,7 @@ app:
 
 # ⭐ Движок транскрипции
 transcription:
-  engine: mlx_whisper  # mlx_whisper | whisper_cpp | remote_asr
+  engine: remote_asr  # mlx_whisper | whisper_cpp | remote_asr
   mlx_whisper:
     # Модель MLX (автоматически скачивается при первом использовании)
     # Доступные модели: mlx-community/whisper-tiny-mlx, whisper-small-mlx, whisper-medium-mlx, whisper-large-v3-mlx
@@ -46,7 +46,7 @@ transcription:
     compression_ratio_threshold: 2.4
   # Удалённый ASR — разгружает MacBook, транскрипция на Linux GPU (Tailscale)
   remote_asr:
-    host: "YOUR_TAILSCALE_IP"  # Укажите Tailscale IP вашего ASR-сервера
+    host: "YOUR_TAILSCALE_IP"  # Укажите Tailscale IP или задайте VTT2_TRANSCRIPTION_REMOTE_ASR_HOST
     port: 8001
     path: "/v1/audio/transcriptions"
     model: "cstr/whisper-large-v3-turbo-int8_float32"

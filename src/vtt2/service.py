@@ -39,6 +39,38 @@ def _find_uv() -> str:
     )
 
 
+def _load_env_vtt2() -> dict[str, str]:
+    """Load KEY=VALUE from .env.vtt2 (gitignored). Used for remote_asr host etc."""
+    env_file = _project_root() / ".env.vtt2"
+    if not env_file.exists():
+        return {}
+    result = {}
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            k, v = line.split("=", 1)
+            result[k.strip()] = v.strip().strip("'\"").replace('\\"', '"')
+    return result
+
+
+def _env_vars_xml(env: dict[str, str]) -> str:
+    """Generate plist EnvironmentVariables block."""
+    if not env:
+        return ""
+    lines = [
+        '    <key>EnvironmentVariables</key>',
+        '    <dict>',
+    ]
+    for k, v in env.items():
+        escaped = v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        lines.append(f'        <key>{k}</key>')
+        lines.append(f'        <string>{escaped}</string>')
+    lines.append("    </dict>")
+    return "\n".join(lines) + "\n\n"
+
+
 def _render_plist() -> str:
     """Read the template plist and replace placeholders with real paths."""
     template_path = _project_root() / "service" / PLIST_NAME
@@ -46,10 +78,15 @@ def _render_plist() -> str:
         raise FileNotFoundError(f"Plist template not found: {template_path}")
 
     content = template_path.read_text(encoding="utf-8")
+
+    env = _load_env_vtt2()
+    env_xml = _env_vars_xml(env)
+
     replacements = {
         "__UV_PATH__": _find_uv(),
         "__PROJECT_DIR__": str(_project_root()),
         "__HOME__": str(Path.home()),
+        "__ENV_VARS_XML__": env_xml,
     }
     for placeholder, value in replacements.items():
         content = content.replace(placeholder, value)
@@ -69,6 +106,9 @@ def install_service() -> int:
 
     # Render and write plist
     try:
+        env_vtt2 = _load_env_vtt2()
+        if env_vtt2:
+            print(f"  .env.vtt2: загружено {len(env_vtt2)} переменных (remote_asr и др.)")
         plist_content = _render_plist()
     except FileNotFoundError as exc:
         print(f"Error: {exc}")

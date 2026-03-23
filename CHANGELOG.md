@@ -1,15 +1,21 @@
 # Changelog
 
+## [1.2.1] - 2026-03-23
+
+### Fixed
+- **Зависание при остановке записи:** `stream.stop()` в sounddevice ждёт буферы PortAudio и мог блокировать горячую клавишу навсегда (после сна, Bluetooth). Используется `abort()` + `close()`.
+
 ## [1.2.0] - 2026-03-12
 
 ### Added
 - **Remote ASR engine** (`remote_asr`): transcribe via Tailscale on a Linux GPU server — frees Mac resources
 - **Lazy engine imports**: only the selected engine is loaded; with `remote_asr`, MLX is never imported (~3 GB RAM saved)
+- **`.env.vtt2`** (gitignored): service env vars (e.g. `LOCAL_AI_ASR_BASE_URL`) — `--install` injects them into the launchd plist
 
 ### Changed
 - **Memory with remote_asr**: ~120 MB on Mac vs ~3.5 GB with local MLX (model runs on server)
 - **Default config**: can be set to `remote_asr` in `config.yaml` for lightweight operation
-- **README**: updated with mode comparison table and memory optimization docs
+- **README**: updated with `.env.vtt2` setup, mode comparison, memory optimization docs
 
 ## [1.1.0] - 2026-03-02
 

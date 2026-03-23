@@ -106,10 +106,17 @@ class AudioRecorder:
         self.is_recording = False
         
         try:
-            # Остановка потока
-            if hasattr(self, 'stream'):
-                self.stream.stop()
-                self.stream.close()
+            # Остановка потока: abort(), не stop() — stop() ждёт все буферы в PortAudio
+            # и может зависнуть навсегда (сон Mac, Bluetooth, смена устройства).
+            if hasattr(self, 'stream') and self.stream is not None:
+                stream = self.stream
+                self.stream = None
+                try:
+                    if not stream.closed and stream.active:
+                        stream.abort(ignore_errors=True)
+                    stream.close(ignore_errors=True)
+                except Exception as e:
+                    logger.warning(f"Остановка аудиопотока: {e}")
             
             # Сборка всех записанных данных
             audio_chunks = []
@@ -148,9 +155,14 @@ class AudioRecorder:
     
     def cleanup(self):
         """Очистка ресурсов"""
-        if hasattr(self, 'stream') and self.stream.active:
-            self.stream.stop()
-            self.stream.close()
+        if hasattr(self, 'stream') and self.stream is not None and not self.stream.closed:
+            try:
+                if self.stream.active:
+                    self.stream.abort(ignore_errors=True)
+                self.stream.close(ignore_errors=True)
+            except Exception as e:
+                logger.warning(f"cleanup stream: {e}")
+            self.stream = None
         
         self.is_recording = False
         self.recorded_audio = []
