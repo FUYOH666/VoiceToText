@@ -302,6 +302,19 @@ class VTT2App(rumps.App):
             text = self.transcription_engine.transcribe(audio_data)
             elapsed = time.time() - start_time
             self.logger.info(f"✅ Транскрипция завершена за {elapsed:.2f} секунд: {len(text)} символов")
+
+            if self.config.text_processing.strip_whisper_tail_artifacts:
+                from text.whisper_artifacts import strip_trailing_whisper_artifacts
+
+                langs = frozenset(self.config.text_processing.whisper_artifact_languages)
+                if langs:
+                    before = len(text)
+                    text, stripped = strip_trailing_whisper_artifacts(text, languages=langs)
+                    if stripped:
+                        self.logger.info(
+                            "Удалён хвостовой артефакт Whisper (−%d символов)",
+                            before - len(text),
+                        )
             
             # Очистка памяти после транскрипции
             # Освобождаем ссылку на аудио данные

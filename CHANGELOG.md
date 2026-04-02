@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.2] - 2026-04-02
+
+### Added
+- **Whisper tail artifact filter**: strips common RU/EN trailing hallucinations (subtitles, “thanks for watching”, etc.) after transcription and before paste; configurable under `text_processing` (`strip_whisper_tail_artifacts`, `whisper_artifact_languages`). See `docs/WHISPER_ARTIFACTS.md`.
+
 ## [1.2.1] - 2026-03-23
 
 ### Fixed

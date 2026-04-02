@@ -49,7 +49,9 @@ def temp_config_file():
             "show_status": True
         },
         "text_processing": {
-            "enabled": False
+            "enabled": False,
+            "strip_whisper_tail_artifacts": True,
+            "whisper_artifact_languages": ["ru", "en"],
         },
         "performance": {
             "use_neural_engine": True,

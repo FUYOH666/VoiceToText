@@ -74,7 +74,10 @@ menu_bar:
 # Постобработка текста (опционально)
 text_processing:
   enabled: false
-  # Можно добавить позже: punctuation, vocabulary, debloat
+  strip_whisper_tail_artifacts: true  # хвостовые «субтитры», продолжение следует и т.п.
+  whisper_artifact_languages:
+    - ru
+    - en
 
 # Производительность
 performance:

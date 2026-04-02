@@ -4,7 +4,7 @@
 
 ---
 
-## The Problem
+ ## The Problem
 
 You type notes, emails, docs for hours. Your voice is 3x faster.
 
@@ -116,6 +116,16 @@ Or I can deploy, customize, and integrate it for your team in **2 weeks** — cu
 | `remote_asr` | **~120 MB** | Linux GPU server via Tailscale |
 
 With `remote_asr`, the model runs on your server — Mac stays light. Lazy imports ensure MLX is never loaded when using remote.
+
+**Models (defaults in `config.yaml`):**
+
+| Engine | Model / artifact |
+|--------|------------------|
+| `remote_asr` | `cstr/whisper-large-v3-turbo-int8_float32` (server-side; override via `transcription.remote_asr.model`) |
+| `mlx_whisper` | `mlx-community/whisper-large-v3-mlx` |
+| `whisper_cpp` | GGML file path, e.g. `models/ggml-medium-q5_0.bin` (`transcription.whisper_cpp.model_path`) |
+
+Tail-end subtitle-style hallucinations are stripped before paste; see [docs/WHISPER_ARTIFACTS.md](docs/WHISPER_ARTIFACTS.md).
 
 **Switch mode:**
 
