@@ -4,7 +4,7 @@
 
 ---
 
- ## The Problem
+## The Problem
 
 You type notes, emails, docs for hours. Your voice is 3x faster.
 
