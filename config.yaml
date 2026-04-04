@@ -1,7 +1,7 @@
 # VTTv2 Configuration
 
 app:
-  version: "1.1.0"
+  version: "1.2.4"
   name: "VTTv2"
 
 # ⭐ Движок транскрипции

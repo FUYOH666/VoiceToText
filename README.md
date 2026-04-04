@@ -44,7 +44,7 @@ cd VoiceToText
 uv sync
 ```
 
-The Whisper model downloads automatically on first use (~6 GB for large-v3). After that, everything works offline.
+With **local** `mlx_whisper`, the model downloads on first use (~6 GB for large-v3); after that, transcription works offline. With **`remote_asr`** (default in this repo’s `config.yaml`), the Mac does not load MLX; transcription needs your ASR server reachable (e.g. via Tailscale).
 
 ### Run
 
@@ -130,11 +130,11 @@ Tail-end subtitle-style hallucinations are stripped before paste; see [docs/WHIS
 **Switch mode:**
 
 ```bash
-# Local on Mac (default)
-VTT2_TRANSCRIPTION_ENGINE=mlx_whisper uv run python src/vtt2/main.py
-
-# Remote via Tailscale — saves ~3 GB RAM
+# Remote ASR (matches default engine in bundled config.yaml)
 VTT2_TRANSCRIPTION_ENGINE=remote_asr uv run python src/vtt2/main.py
+
+# Local MLX on Mac — downloads model, ~3.5 GB RAM for large-v3
+VTT2_TRANSCRIPTION_ENGINE=mlx_whisper uv run python src/vtt2/main.py
 ```
 
 To use remote ASR, set in `config.yaml`:
@@ -184,20 +184,25 @@ Default is `whisper-large-v3-mlx` (best quality). If you have 8 GB RAM, use `whi
 
 ### Configuration
 
-All settings are in `config.yaml`:
+All settings are in `config.yaml`. Shape (simplified):
 
 ```yaml
-# Language: "auto" detects automatically, or set "en", "ru", "zh", "ja", etc.
-language: "auto"
+transcription:
+  engine: remote_asr  # or mlx_whisper | whisper_cpp
+  mlx_whisper:
+    model_name: "mlx-community/whisper-large-v3-mlx"
+    language: "auto"  # or "en", "ru", "zh", "ja", …
 
-# Hotkey
-hotkey: "option+space"
+audio:
+  max_recording_duration: 7200  # seconds (2 hours)
 
-# Auto-paste transcribed text into the active app
-auto_paste_enabled: true
+ui:
+  hotkey: "option+space"
+  auto_paste_enabled: true
 
-# Max recording length (seconds)
-max_recording_duration: 7200  # 2 hours
+text_processing:
+  strip_whisper_tail_artifacts: true
+  whisper_artifact_languages: [ru, en]
 ```
 
 You can also override settings with environment variables using the `VTT2_` prefix (see `.env.example`).

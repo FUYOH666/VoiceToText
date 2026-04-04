@@ -17,6 +17,13 @@ def test_ru_tail_line_removed():
     assert changed is True
 
 
+def test_ru_dubrovsky_subtitles_tail_removed():
+    s = "Текст диктовки.\nСпасибо за субтитры Алексею Дубровскому!"
+    out, changed = strip_trailing_whisper_artifacts(s, languages=frozenset({"ru"}))
+    assert out == "Текст диктовки."
+    assert changed is True
+
+
 def test_multiple_trailing_lines_removed():
     s = "Основной текст\n\nПОДПИШИСЬ\nСубтитры добавил DimaTorzok"
     out, changed = strip_trailing_whisper_artifacts(s, languages=frozenset({"ru"}))

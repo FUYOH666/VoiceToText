@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.4] - 2026-04-02
+
+### Added
+- **Whisper tail list (RU):** `Спасибо за субтитры Алексею Дубровскому!`
+
+## [1.2.3] - 2026-04-02
+
+### Changed
+- **README:** configuration example matches real `config.yaml` nesting; clarify default engine (`remote_asr` in bundled config) vs local MLX; separate “offline after download” (local) from remote ASR (needs server).
+
 ## [1.2.2] - 2026-04-02
 
 ### Added
