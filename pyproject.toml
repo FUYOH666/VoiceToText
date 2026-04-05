@@ -1,6 +1,6 @@
 [project]
 name = "vtt-mlx-m4"
-version = "1.2.4"
+version = "1.2.5"
 description = "Voice-to-Text для macOS с MLX Whisper, оптимизировано для M4 Max и длинных записей"
 readme = "README.md"
 requires-python = ">=3.12"
