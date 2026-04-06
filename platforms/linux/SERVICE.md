@@ -114,6 +114,16 @@ systemctl --user is-enabled f9-asr.service
    systemctl --user show f9-asr.service | grep Environment
    ```
 
+### Ошибка `Can't connect to display ":0"` (pynput)
+
+Часто у GDM/X11 дисплей **:1**, а не **:0**. Сервис запускается через `scripts/f9-asr-launch.sh`, который подбирает сокет `X0`/`X1`/`X2` и задаёт `XAUTHORITY` для GDM (`/run/user/UID/gdm/Xauthority`).
+
+Переустановите unit:
+
+```bash
+./scripts/install-service.sh
+```
+
 ### Горячая клавиша F9 не работает
 
 1. Убедитесь, что сервис запущен:

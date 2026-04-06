@@ -5,11 +5,11 @@ Wants=graphical-session.target
 
 [Service]
 Type=simple
-Environment="DISPLAY=:0"
 Environment="HOME=%h"
 Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
-# WorkingDirectory будет установлен скриптом install-service.sh
-ExecStart=%h/.local/bin/uv run python -m f9_asr.main
+# DISPLAY/XAUTHORITY задаёт scripts/f9-asr-launch.sh (часто :1 вместо :0)
+# WorkingDirectory и полный путь к launch — install-service.sh
+ExecStart=PLACEHOLDER_LAUNCH
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -23,8 +23,6 @@ PrivateTmp=true
 # Ограничения памяти для предотвращения утечек
 MemoryMax=200M
 MemoryHigh=150M
-# Kill if memory exceeds limit
-MemoryLimit=200M
 
 [Install]
 WantedBy=default.target

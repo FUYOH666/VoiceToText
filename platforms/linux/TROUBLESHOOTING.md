@@ -76,6 +76,17 @@ journalctl --user -u f9-asr.service -f
 2. Перезапустить WirePlumber, переподключить гарнитуру
 3. В `config.yaml`: `audio.device: null`
 
+## Проблема: сервис f9-asr постоянно перезапускается / ImportError pynput
+
+### Симптомы
+- В логах: `Can't connect to display ":0"` или `Connection refused`
+
+### Причина
+Жёстко заданный `DISPLAY=:0`, а сессия GDM часто использует **:1**.
+
+### Решение
+Запуск через `scripts/f9-asr-launch.sh` (подставляется при `./scripts/install-service.sh`). Переустановите сервис из каталога проекта.
+
 ## Проблема: F9 не запускает запись
 
 ### Симптомы

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2026-04-06
+
+### Fixed
+
+- **systemd + X11:** сервис падал с `Can't connect to display ":0"` при `DISPLAY=:1` (GDM). Добавлен `scripts/f9-asr-launch.sh` — подбор сокета X0/X1/X2 и `XAUTHORITY` для GDM.
+- Удалён устаревший `MemoryLimit=` из unit (остаются `MemoryMax` / `MemoryHigh`).
+
+### Changed
+
+- SERVICE.md, TROUBLESHOOTING.md — раздел про DISPLAY и переустановку сервиса.
+
 ## [0.1.2] - 2026-02-22
 
 ### Added

@@ -1,5 +1,9 @@
 # Release Notes
 
+## v0.1.3 (2026-04-06)
+
+- Исправление systemd: `f9-asr-launch.sh` для DISPLAY `:1` (GDM) и XAUTHORITY
+
 ## v0.1.2 (2026-02-22)
 
 - Bluetooth-микрофон (WirePlumber headset-head-unit)

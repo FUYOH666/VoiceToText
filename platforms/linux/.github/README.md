@@ -6,8 +6,8 @@
 
 ```bash
 # 1. Клонировать репозиторий
-git clone <repository-url>
-cd F9-asr
+git clone https://github.com/FUYOH666/VoiceToText.git
+cd VoiceToText/platforms/linux
 
 # 2. Установить зависимости
 sudo apt install -y alsa-utils libnotify-bin xclip

@@ -67,12 +67,13 @@ SERVICE_TARGET="$SYSTEMD_USER_DIR/f9-asr.service"
 UV_PATH=$(which uv || echo "$HOME/.local/bin/uv")
 # Get absolute path to project directory
 PROJECT_DIR_ABS=$(cd "$PROJECT_DIR" && pwd)
+LAUNCH_SCRIPT="$PROJECT_DIR_ABS/scripts/f9-asr-launch.sh"
+chmod +x "$LAUNCH_SCRIPT"
 
 # Create service file with proper paths
 {
-    # Read template and replace placeholders
-    sed "s|%h|$USER_HOME|g; s|%h/.local/bin/uv|$UV_PATH|g" "$SERVICE_FILE" | \
-    # Add WorkingDirectory before ExecStart if not present
+    sed "s|%h|$USER_HOME|g" "$SERVICE_FILE" | \
+    sed "s|PLACEHOLDER_LAUNCH|$LAUNCH_SCRIPT|g" | \
     awk -v wd="$PROJECT_DIR_ABS" '
         /^ExecStart=/ && !wd_set {
             print "WorkingDirectory=" wd
