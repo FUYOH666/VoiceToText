@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import sounddevice as sd
 from typing import Optional, List
-from queue import Queue
+from queue import Empty, Queue
 import time
 
 logger = logging.getLogger(__name__)
@@ -118,11 +118,13 @@ class AudioRecorder:
                 except Exception as e:
                     logger.warning(f"Остановка аудиопотока: {e}")
             
-            # Сборка всех записанных данных
+            # Сборка всех записанных данных (только get_nowait: empty()+get() даёт гонку и вечный блок на get())
             audio_chunks = []
-            while not self.audio_queue.empty():
-                chunk = self.audio_queue.get()
-                audio_chunks.append(chunk)
+            while True:
+                try:
+                    audio_chunks.append(self.audio_queue.get_nowait())
+                except Empty:
+                    break
             
             if not audio_chunks:
                 logger.warning("Нет аудио данных")
