@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.8] - 2026-04-17
+
+### Changed
+- **Docs:** README troubleshooting notes v1.2.6 queue-drain fix; `docs/WHISPER_ARTIFACTS.md` — явная отсылка к `whisper_artifacts.py` как к полному списку фраз.
+
 ## [1.2.7] - 2026-04-08
 
 ### Added

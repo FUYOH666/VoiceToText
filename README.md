@@ -212,7 +212,7 @@ You can also override settings with environment variables using the `VTT2_` pref
 **Hotkey not working:**
 Add your terminal app to System Settings > Privacy & Security > Accessibility and Input Monitoring. Restart the app.
 
-**Hotkey stopped responding after recording (stuck):** Restart the service: `launchctl unload ~/Library/LaunchAgents/ai.vtt2.plist && launchctl load ~/Library/LaunchAgents/ai.vtt2.plist`. If a zombie process remains, kill it in Activity Monitor (`python … main.py`) or `pkill -9 -f vtt2/main.py`, remove `~/.local/state/vtt2/vtt2.pid`, then load again. (v1.2.1+ uses a safer audio stop to reduce this.)
+**Hotkey stopped responding after recording (stuck):** Restart the service: `launchctl unload ~/Library/LaunchAgents/ai.vtt2.plist && launchctl load ~/Library/LaunchAgents/ai.vtt2.plist`. If a zombie process remains, kill it in Activity Monitor (`python … main.py`) or `pkill -9 -f vtt2/main.py`, remove `~/.local/state/vtt2/vtt2.pid`, then load again. (v1.2.1+: safer stream stop; v1.2.6+: non-blocking drain of the audio chunk queue after stop — update if you still see hangs.)
 
 **"Model not found" on first run:**
 The model downloads from Hugging Face on first use. Make sure you have internet for the initial download. After that, everything works offline.
