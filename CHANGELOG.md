@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.7] - 2026-04-08
+
+### Added
+- **Whisper tail list (RU):** `Субтитры сделал DimaTorzok`
+
 ## [1.2.6] - 2026-04-08
 
 ### Fixed

@@ -31,6 +31,13 @@ def test_ru_dimatorzok_sozdaval_tail_removed():
     assert changed is True
 
 
+def test_ru_dimatorzok_sdelal_tail_removed():
+    s = "Заметка.\nСубтитры сделал DimaTorzok"
+    out, changed = strip_trailing_whisper_artifacts(s, languages=frozenset({"ru"}))
+    assert out == "Заметка."
+    assert changed is True
+
+
 def test_multiple_trailing_lines_removed():
     s = "Основной текст\n\nПОДПИШИСЬ\nСубтитры добавил DimaTorzok"
     out, changed = strip_trailing_whisper_artifacts(s, languages=frozenset({"ru"}))
