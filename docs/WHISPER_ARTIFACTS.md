@@ -46,4 +46,8 @@ text_processing:
 ## Ссылки
 
 - Сборник типичных RU-хвостов (gist): [whisper-hallucinations-ru](https://gist.github.com/waveletdeboshir/8bf52f04bf78018194f25b2390c08309)
+- Обмен примерами: [openai/whisper discussion #1873](https://github.com/openai/whisper/discussions/1873)
+- Датасет по шуму (частотные фразы, не только «хвосты»): [sachaarbonel/whisper-hallucinations](https://huggingface.co/datasets/sachaarbonel/whisper-hallucinations) на Hugging Face
 - Обсуждения вокруг hallucinations в openai/whisper: см. issues репозитория [openai/whisper](https://github.com/openai/whisper/issues) (поиск по «hallucination», «subtitles»).
+
+Короткие английские слова вроде отдельного «Music» или «Applause» в фильтр специально не добавляются — их легко произнести в конце диктовки осмысленно.

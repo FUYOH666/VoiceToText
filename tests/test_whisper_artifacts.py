@@ -52,6 +52,20 @@ def test_en_tail_suffix():
     assert changed is True
 
 
+def test_en_castingwords_tail_line():
+    s = "Real spoken content.\nTranscription by CastingWords"
+    out, changed = strip_trailing_whisper_artifacts(s, languages=frozenset({"en"}))
+    assert out == "Real spoken content."
+    assert changed is True
+
+
+def test_en_thats_all_suffix():
+    s = "Quick note here. That's all!"
+    out, changed = strip_trailing_whisper_artifacts(s, languages=frozenset({"en"}))
+    assert out == "Quick note here."
+    assert changed is True
+
+
 def test_ru_phrase_not_stripped_when_only_en_list():
     s = "Текст\nСубтитры добавил DimaTorzok"
     out, changed = strip_trailing_whisper_artifacts(s, languages=frozenset({"en"}))

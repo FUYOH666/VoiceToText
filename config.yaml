@@ -1,12 +1,13 @@
 # VTTv2 Configuration
 
 app:
-  version: "1.2.8"
+  version: "1.2.9"
   name: "VTTv2"
 
 # ⭐ Движок транскрипции
 transcription:
-  engine: remote_asr  # mlx_whisper | whisper_cpp | remote_asr
+  # remote_asr — когда GPU ASR снова в сети; сейчас — локальный MLX
+  engine: mlx_whisper  # mlx_whisper | whisper_cpp | remote_asr
   mlx_whisper:
     # Модель MLX (автоматически скачивается при первом использовании)
     # Доступные модели: mlx-community/whisper-tiny-mlx, whisper-small-mlx, whisper-medium-mlx, whisper-large-v3-mlx

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.9] - 2026-04-20
+
+### Added
+- **Whisper tail list (EN):** `Transcription by CastingWords`, `Thank you for listening`, `That's all`, `Thanks!` (по обсуждениям Whisper / WhisperLive)
+
+### Changed
+- **Docs:** `WHISPER_ARTIFACTS.md` — дополнительные ссылки на discussion и HF-датасет; пояснение про короткие EN-слова.
+
 ## [1.2.8] - 2026-04-17
 
 ### Changed

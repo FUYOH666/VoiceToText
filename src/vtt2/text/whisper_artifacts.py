@@ -103,6 +103,13 @@ _EN_PHRASES: tuple[str, ...] = (
     "See you next time",
     "Don't forget to subscribe",
     "Like and subscribe",
+    # Частые EN-хвосты из обсуждений hallucinations / WhisperLive (не короткие общие слова — см. docs)
+    "Transcription by CastingWords",
+    "Thank you for listening!",
+    "Thank you for listening",
+    "That's all!",
+    "That's all",
+    "Thanks!",
 )
 
 
