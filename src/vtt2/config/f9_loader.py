@@ -76,7 +76,7 @@ class F9Config(BaseModel):
         data = deep_merge(data, profile_data)
 
         cls._load_env_file(project_root / ".env.local")
-        data = cls._apply_local_ai_asr_env(data)
+        data = cls._apply_local_ai_asr_env(data, profile_name=profile_name)
 
         return cls(**data)
 
@@ -105,16 +105,30 @@ class F9Config(BaseModel):
                 os.environ[key] = value
 
     @staticmethod
-    def _apply_local_ai_asr_env(data: dict[str, Any]) -> dict[str, Any]:
+    def _apply_local_ai_asr_env(
+        data: dict[str, Any],
+        *,
+        profile_name: str,
+    ) -> dict[str, Any]:
+        """Apply LOCAL_AI_ASR_* only for edge profile (parity with Mac remote_asr)."""
         if "asr" not in data:
             data["asr"] = {}
-        base_url = os.getenv("LOCAL_AI_ASR_BASE_URL")
+        asr = data["asr"]
+        yaml_url = str(asr.get("base_url", ""))
+        use_env = profile_name == "linux-f9-edge" or "YOUR_ASR_HOST" in yaml_url
+        if not use_env:
+            return data
+
+        base_url = os.getenv("LOCAL_AI_ASR_BASE_URL", "").strip()
         if base_url:
-            data["asr"]["base_url"] = base_url.rstrip("/")
+            asr["base_url"] = base_url.rstrip("/")
         timeout = os.getenv("LOCAL_AI_ASR_TIMEOUT")
         if timeout:
             try:
-                data["asr"]["timeout"] = int(timeout)
+                asr["timeout"] = int(timeout)
             except ValueError:
                 pass
+        lang = os.getenv("LOCAL_AI_ASR_DEFAULT_LANGUAGE")
+        if lang:
+            asr["language"] = lang
         return data
