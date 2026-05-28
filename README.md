@@ -22,6 +22,29 @@ Golden standard: [docs/GOLDEN_STANDARD.md](docs/GOLDEN_STANDARD.md)
 
 Press **Option+Space** to record; text is transcribed on your ASR server and pasted into the active app.
 
+## Run from Terminal (Mac)
+
+From the **repository root** (after `uv sync --extra mac` and `.env.local`):
+
+```bash
+# Menu-bar app (default profile from config.yaml = mac-m1-remote)
+.venv/bin/python src/vtt2/main.py
+
+# Explicit profile + health check (ASR must answer GET /healthz)
+.venv/bin/python src/vtt2/main.py --profile mac-m1-remote --health
+
+# Same via unified CLI (needs: uv pip install -e .  or  uv sync --extra mac)
+uv run vtt mac run --profile mac-m1-remote
+```
+
+One-liner if you are already in the project directory:
+
+```bash
+./.venv/bin/python src/vtt2/main.py --profile mac-m1-remote
+```
+
+Stop the app with **Ctrl+C** in the terminal (or quit from the menu-bar icon).
+
 ## Profiles
 
 | Profile | Use case |

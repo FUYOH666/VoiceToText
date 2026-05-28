@@ -1,12 +1,18 @@
 """
 Тесты для системных разрешений macOS (с моками)
 """
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
 import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "vtt2"))
+
+pytestmark = pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="macOS permissions tests require PyObjC/AVFoundation",
+)
 
 
 class TestPermissionsChecker:
