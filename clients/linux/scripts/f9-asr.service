@@ -1,0 +1,28 @@
+[Unit]
+Description=F9 ASR Voice Transcription Service
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+Environment="HOME=%h"
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+# DISPLAY/XAUTHORITY задаёт scripts/f9-asr-launch.sh (часто :1 вместо :0)
+# WorkingDirectory и полный путь к launch — install-service.sh
+ExecStart=PLACEHOLDER_LAUNCH
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Memory limits (prevent memory leaks)
+# Ограничения памяти для предотвращения утечек
+MemoryMax=200M
+MemoryHigh=150M
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,56 @@
+# F9 ASR Configuration
+# Конфигурация системы транскрипции голоса по F9
+
+# ASR Service settings
+asr:
+  # URL ASR сервиса
+  base_url: "http://localhost:8001"
+  # Endpoint для транскрипции (OpenAI-compatible)
+  transcription_endpoint: "/v1/audio/transcriptions"
+  # Таймаут запроса в секундах
+  timeout: 30
+  # Язык транскрипции (None для автоопределения, или "Russian", "English", etc.)
+  language: null
+  # Формат ответа: json, text, srt, verbose_json, vtt
+  # Используем json для более надежной обработки
+  response_format: "json"
+
+# Audio recording settings
+audio:
+  # Частота дискретизации (Hz)
+  sample_rate: 16000
+  # Каналы (1 = моно, 2 = стерео)
+  channels: 1
+  # Формат аудио (S16_LE для arecord)
+  format: "S16_LE"
+  # ALSA устройство захвата. null = системный default (для Bluetooth см. docs/BLUETOOTH_MIC.md).
+  # Встроенный микрофон: plughw:CARD=Generic_1,DEV=0
+  device: null
+  # Временная директория для записи
+  temp_dir: "/tmp/f9-asr-recordings"
+  # Максимальная длительность записи в секундах (0 = без ограничений)
+  max_duration: 0
+  # Автоматическая очистка старых файлов (в часах, 0 = отключено)
+  # Файлы старше указанного времени будут удалены при старте
+  cleanup_max_age_hours: 24
+
+# Hotkey settings
+hotkey:
+  # Клавиша для запуска/остановки записи
+  key: "f9"
+  # Путь к PID файлу для отслеживания состояния
+  pid_file: "/tmp/f9-asr-recording.pid"
+
+# UI settings
+ui:
+  # Показывать уведомления (требует libnotify)
+  show_notifications: true
+  # Копировать результат в буфер обмена
+  copy_to_clipboard: true
+
+# Logging settings
+logging:
+  # Уровень логирования: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  # Формат логов
+  format: "%(asctime)s · %(levelname)s · %(name)s · %(message)s"

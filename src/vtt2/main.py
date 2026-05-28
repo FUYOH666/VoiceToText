@@ -2,12 +2,21 @@
 VTTv2 - Главное приложение
 Voice-to-Text для macOS с MLX Whisper
 """
+import os
 import sys
 import signal
 import argparse
 import threading
 import time
 from pathlib import Path
+from typing import Optional
+
+# Allow imports from src/ (vtt_asr_client + vtt2)
+_src_root = Path(__file__).resolve().parent.parent
+if str(_src_root) not in sys.path:
+    sys.path.insert(0, str(_src_root))
+
+import numpy as np
 import rumps
 
 from utils.logger import setup_logging
@@ -54,6 +63,10 @@ class VTT2App(rumps.App):
         self._is_recording = False
         self._is_processing = False
         self.last_text = ""
+        # PortAudio stop()/close() на главном потоке macOS может зависать — старт/стоп только в фоне + lock
+        self._recorder_ready = threading.Event()
+        self._recorder_ready.set()
+        self._audio_io_lock = threading.Lock()
         
         # Инициализация менеджера памяти для долгой работы
         cleanup_threshold = int(
@@ -107,12 +120,26 @@ class VTT2App(rumps.App):
             # Проверяем разрешения с возможностью запроса
             mic_ok = permissions.check_microphone_permission(fail_fast=False)
             if not mic_ok:
-                # Пытаемся запросить разрешение интерактивно
-                self._request_microphone_permission()
-                # Повторная проверка
-                mic_ok = permissions.check_microphone_permission(fail_fast=True)
+                # В режиме launchd нет интерактивного диалога — не завершаем
+                if os.environ.get("VTT2_LAUNCHD"):
+                    self.logger.warning(
+                        "⚠️ Запуск через launchd: разрешение на микрофон не проверено. "
+                        "Добавьте Python в Системные настройки > Конфиденциальность > Микрофон."
+                    )
+                    if APPHELPER_AVAILABLE:
+                        AppHelper.callAfter(
+                            lambda: rumps.notification(
+                                "VTT2", "Микрофон",
+                                "Добавьте Python в Конфиденциальность > Микрофон"
+                            )
+                        )
+                else:
+                    self._request_microphone_permission()
+                    mic_ok = permissions.check_microphone_permission(fail_fast=True)
             
-            accessibility_ok = permissions.check_accessibility_permission(fail_fast=True)
+            accessibility_ok = permissions.check_accessibility_permission(
+                fail_fast=not os.environ.get("VTT2_LAUNCHD")
+            )
             
             # Проверка Input Monitoring (требуется в macOS Sequoia 15+ для автовставки)
             input_monitoring_ok = permissions.check_input_monitoring_permission(fail_fast=False)
@@ -120,8 +147,8 @@ class VTT2App(rumps.App):
                 self.logger.warning("⚠️ Разрешение Input Monitoring не предоставлено")
                 self.logger.warning("⚠️ Автовставка может не работать")
                 self.logger.warning("⚠️ Перейдите в Системные настройки > Конфиденциальность и безопасность > Мониторинг ввода")
-                # Не завершаем приложение, но предупреждаем пользователя
-                if self.config.ui.auto_paste_enabled:
+                # Не завершаем приложение, но предупреждаем пользователя (не в launchd — нет GUI)
+                if self.config.ui.auto_paste_enabled and not os.environ.get("VTT2_LAUNCHD"):
                     rumps.alert(
                         "Требуется разрешение",
                         "Для автовставки текста требуется разрешение 'Мониторинг ввода'.\n\n"
@@ -194,19 +221,23 @@ class VTT2App(rumps.App):
             self.logger.error(f"Ошибка горячих клавиш: {e}")
     
     def _on_hotkey_pressed(self):
-        """Обработка нажатия горячей клавиши"""
-        self.logger.info("🔥 Горячая клавиша нажата!")
-        
-        if self.is_processing:
-            self.logger.warning("⚠️ Обработка уже идет, игнорируем нажатие")
-            return
-        
-        if self.is_recording:
-            self.logger.info("⏹️ Останавливаем запись...")
-            self.stop_recording()
+        """Обработка нажатия горячей клавиши — выполняется в главном потоке"""
+        def _do_hotkey():
+            self.logger.info("🔥 Горячая клавиша нажата!")
+            if self.is_processing:
+                self.logger.warning("⚠️ Обработка уже идет, игнорируем нажатие")
+                return
+            if self.is_recording:
+                self.logger.info("⏹️ Останавливаем запись...")
+                self.stop_recording()
+            else:
+                self.logger.info("▶️ Начинаем запись...")
+                self.start_recording()
+
+        if APPHELPER_AVAILABLE:
+            AppHelper.callAfter(_do_hotkey)
         else:
-            self.logger.info("▶️ Начинаем запись...")
-            self.start_recording()
+            _do_hotkey()
     
     @rumps.clicked("🎤 Начать запись")
     def toggle_recording(self, _):
@@ -220,7 +251,11 @@ class VTT2App(rumps.App):
         """Начало записи"""
         if self.is_recording or self.is_processing:
             return
-        
+        if not self._recorder_ready.wait(timeout=120.0):
+            self.logger.warning("Рекордер не готов: таймаут ожидания остановки предыдущей записи")
+            return
+        self._recorder_ready.clear()
+
         try:
             # Сохраняем активное приложение ПЕРЕД началом записи (для автовставки)
             if self.config.ui.auto_paste_enabled:
@@ -229,54 +264,77 @@ class VTT2App(rumps.App):
                 if not saved:
                     self.logger.warning("⚠️ Не удалось сохранить активное приложение, автовставка может не работать")
             
+            with self._audio_io_lock:
+                self.audio_recorder.start_recording()
             self.is_recording = True
             self.title = self.config.menu_bar.icon_recording
             self._update_status("ЗАПИСЬ")
-            
-            self.audio_recorder.start_recording()
             self.logger.info("✅ Запись начата")
             
         except Exception as e:
             self.logger.error(f"Ошибка начала записи: {e}")
             self.is_recording = False
+            self._recorder_ready.set()
             self.title = self.config.menu_bar.icon_idle
             self._update_status("Ошибка")
             rumps.alert("Ошибка", f"Не удалось начать запись: {e}")
     
     def stop_recording(self):
-        """Остановка записи и обработка"""
+        """Остановка записи и обработка (остановка PortAudio — в фоне, UI не блокируется)."""
         if not self.is_recording:
             return
         
+        self.is_recording = False
+        self.title = self.config.menu_bar.icon_processing
+        self._update_status("Обработка...")
+        threading.Thread(
+            target=self._stop_recording_worker,
+            daemon=True,
+            name="vtt2-stop-recorder",
+        ).start()
+
+    def _stop_recording_worker(self):
+        """Остановка потока записи и запуск транскрипции — не главный поток."""
+        audio_data = None
         try:
-            self.is_recording = False
-            self._update_status("Обработка...")
-            
-            # Остановка записи
-            audio_data = self.audio_recorder.stop_recording()
-            
-            if audio_data is None or len(audio_data) == 0:
-                self.logger.warning("Нет аудио данных")
-                self.title = self.config.menu_bar.icon_idle
-                self._update_status("Готов")
-                return
-            
-            duration_seconds = len(audio_data) / self.config.audio.sample_rate
-            self.logger.info(f"📊 Получено аудио: {len(audio_data)} сэмплов ({duration_seconds:.1f} секунд, {duration_seconds/60:.1f} минут)")
-            
-            # Обработка в отдельном потоке
-            self.logger.info("🔄 Запуск потока обработки аудио...")
-            threading.Thread(
-                target=self._process_audio,
-                args=(audio_data,),
-                daemon=True
-            ).start()
-            self.logger.info("✅ Поток обработки запущен")
-            
+            self.logger.info("🔄 Остановка PortAudio (sounddevice)…")
+            with self._audio_io_lock:
+                audio_data = self.audio_recorder.stop_recording()
         except Exception as e:
             self.logger.error(f"Ошибка остановки записи: {e}")
-            self.title = self.config.menu_bar.icon_idle
-            self._update_status("Ошибка")
+        finally:
+            self._recorder_ready.set()
+
+        if audio_data is None or len(audio_data) == 0:
+            self.logger.warning("Нет аудио данных")
+
+            def _empty_ui():
+                self.title = self.config.menu_bar.icon_idle
+                self._update_status("Готов")
+                rumps.notification(
+                    "VTT2", "Нет аудио",
+                    "Проверьте микрофон в Системных настройках > Конфиденциальность",
+                )
+
+            if APPHELPER_AVAILABLE:
+                AppHelper.callAfter(_empty_ui)
+            else:
+                _empty_ui()
+            return
+
+        duration_seconds = len(audio_data) / self.config.audio.sample_rate
+        self.logger.info(
+            f"📊 Получено аудио: {len(audio_data)} сэмплов "
+            f"({duration_seconds:.1f} секунд, {duration_seconds/60:.1f} минут)"
+        )
+        self.logger.info("🔄 Запуск потока обработки аудио...")
+        threading.Thread(
+            target=self._process_audio,
+            args=(audio_data,),
+            daemon=True,
+            name="vtt2-process-audio",
+        ).start()
+        self.logger.info("✅ Поток обработки запущен")
     
     def _process_audio(self, audio_data):
         """Обработка аудио в отдельном потоке"""
@@ -295,7 +353,21 @@ class VTT2App(rumps.App):
             self.logger.info("🔧 Подготовка аудио данных...")
             audio_data = self.audio_processor.prepare_for_whisper(audio_data)
             self.logger.info(f"✅ Аудио подготовлено: {len(audio_data)} сэмплов")
-            
+
+            # Проверка на тишину (нет доступа к микрофону = нули)
+            max_amp = float(np.max(np.abs(audio_data))) if len(audio_data) > 0 else 0.0
+            if max_amp < 0.001:
+                self.logger.warning("Запись тишины — вероятно нет доступа к микрофону")
+                if APPHELPER_AVAILABLE:
+                    AppHelper.callAfter(
+                        lambda: rumps.notification(
+                            "VTT2", "Нет доступа к микрофону",
+                            "Добавьте Python в Конфиденциальность > Микрофон"
+                        )
+                    )
+                self._finalize_processing(None)
+                return
+
             # Транскрипция
             self.logger.info("🎤 Начало транскрипции...")
             start_time = time.time()
@@ -323,6 +395,13 @@ class VTT2App(rumps.App):
             
             if not text or not text.strip():
                 self.logger.warning("Пустой результат транскрипции")
+                if APPHELPER_AVAILABLE:
+                    AppHelper.callAfter(
+                        lambda: rumps.notification(
+                            "VTT2", "Пустой результат",
+                            "Микрофон или ASR не вернули текст"
+                        )
+                    )
                 self._finalize_processing(None)
                 return
             
@@ -338,6 +417,7 @@ class VTT2App(rumps.App):
                                 self.logger.info("✅ Автовставка выполнена успешно")
                             else:
                                 self.logger.warning("⚠️ Автовставка не удалась, текст скопирован в буфер обмена")
+                                rumps.notification("VTT2", "Вставка не удалась", "Текст в буфере — вставьте Cmd+V")
                         except Exception as e:
                             self.logger.error(f"Ошибка автовставки: {e}")
                     
@@ -350,6 +430,7 @@ class VTT2App(rumps.App):
                             self.logger.info("✅ Автовставка выполнена успешно")
                         else:
                             self.logger.warning("⚠️ Автовставка не удалась, текст скопирован в буфер обмена")
+                            rumps.notification("VTT2", "Вставка не удалась", "Текст в буфере — вставьте Cmd+V")
                     except Exception as e:
                         self.logger.error(f"Ошибка автовставки: {e}")
             
@@ -419,7 +500,8 @@ class VTT2App(rumps.App):
         # Определяем название движка для отображения
         engine_name = {
             "mlx_whisper": "MLX Whisper",
-            "whisper_cpp": "whisper.cpp"
+            "whisper_cpp": "whisper.cpp",
+            "remote_asr": "Remote ASR (TailScale)",
         }.get(self.config.transcription.engine, self.config.transcription.engine)
         
         rumps.alert(
@@ -453,7 +535,8 @@ class VTT2App(rumps.App):
         # Проверка текущего движка
         engine_name = {
             "mlx_whisper": "MLX Whisper",
-            "whisper_cpp": "whisper.cpp"
+            "whisper_cpp": "whisper.cpp",
+            "remote_asr": "Remote ASR (TailScale)",
         }.get(self.config.transcription.engine, self.config.transcription.engine)
         checks.append(f"Движок ({engine_name}): ✅")
         
@@ -523,7 +606,10 @@ class VTT2App(rumps.App):
                         f"Остановка горячих клавиш заняла >{HOTKEY_STOP_TIMEOUT:.0f}с, выходим принудительно"
                     )
 
-            if hasattr(self, 'audio_recorder'):
+            if hasattr(self, "audio_recorder") and hasattr(self, "_audio_io_lock"):
+                with self._audio_io_lock:
+                    self.audio_recorder.cleanup()
+            elif hasattr(self, "audio_recorder"):
                 self.audio_recorder.cleanup()
         except Exception as e:
             self.logger.error(f"Ошибка при выходе: {e}")
@@ -531,29 +617,35 @@ class VTT2App(rumps.App):
             rumps.quit_application()
 
 
-def health_check_command(config_path: str = "config.yaml"):
+def _print_health_results(checks: dict[str, str]) -> None:
+    print("\n=== Результаты Health Check ===")
+    for check, status in checks.items():
+        print(f"{check}: {status}")
+
+
+def health_check_command(
+    config_path: str = "config.yaml",
+    profile: Optional[str] = None,
+):
     """Команда health check из CLI"""
-    project_root = Path.cwd()
-    if not (project_root / config_path).exists():
-        # Попробуем найти относительно src/
-        project_root = Path(__file__).parent.parent.parent
-    
+    project_root = _resolve_project_root(config_path)
     config_file = project_root / config_path
-    
+
     logger = setup_logging()
     logger.info("=== Health Check VTTv2 ===")
-    
-    checks = {}
-    
-    # Проверка конфигурации
+
+    checks: dict[str, str] = {}
+
     try:
-        config = Config.from_yaml(str(config_file), project_root)
+        config = Config.from_yaml(str(config_file), project_root, profile=profile)
         checks["config"] = "✅"
-        logger.info("Конфигурация: OK")
+        checks["profile"] = config.active_profile
+        logger.info("Конфигурация: OK (profile=%s)", config.active_profile)
     except Exception as e:
         checks["config"] = f"❌ {e}"
-        logger.error(f"Конфигурация: ERROR - {e}")
-        return
+        logger.error("Конфигурация: ERROR - %s", e)
+        _print_health_results(checks)
+        return 1
     
     # Проверка разрешений (без fail_fast для health check)
     try:
@@ -582,11 +674,51 @@ def health_check_command(config_path: str = "config.yaml"):
             checks["whisper_cpp"] = "✅"
         except Exception as e:
             checks["whisper_cpp"] = f"❌ {e}"
-    
-    # Вывод результатов
-    print("\n=== Результаты Health Check ===")
-    for check, status in checks.items():
-        print(f"{check}: {status}")
+    elif engine_type == "remote_asr":
+        try:
+            import subprocess
+            from urllib.parse import urlparse
+
+            from vtt_asr_client.client import ASRClient, ASRClientConfig
+
+            asr_config = config.transcription.remote_asr
+            base_url = (asr_config.base_url or "").strip()
+            if not base_url or "YOUR_ASR_HOST" in base_url:
+                checks["remote_asr_url"] = (
+                    "❌ Set LOCAL_AI_ASR_BASE_URL in .env.local (see .env.example)"
+                )
+            else:
+                checks["remote_asr_url"] = "✅"
+                parsed = urlparse(base_url)
+                host = parsed.hostname
+                if host and host not in ("127.0.0.1", "localhost"):
+                    try:
+                        ping_result = subprocess.run(
+                            ["ping", "-c", "1", host],
+                            timeout=5,
+                            capture_output=True,
+                        )
+                        checks["tailscale"] = (
+                            "✅" if ping_result.returncode == 0 else f"❌ ping {host}"
+                        )
+                    except Exception as e:
+                        checks["tailscale"] = f"❌ {e}"
+
+                client = ASRClient(
+                    ASRClientConfig(
+                        base_url=base_url,
+                        timeout=asr_config.timeout,
+                        model=asr_config.model,
+                        language=asr_config.language,
+                    )
+                )
+                checks["remote_asr"] = (
+                    "✅" if client.healthz() else "❌ /healthz failed"
+                )
+        except Exception as e:
+            checks["remote_asr"] = f"❌ {e}"
+
+    _print_health_results(checks)
     
     # Дополнительная информация
     print("\n=== Инструкции ===")
@@ -600,6 +732,14 @@ def health_check_command(config_path: str = "config.yaml"):
         print("⚠️ Разрешение Accessibility не предоставлено:")
         print("   1. Системные настройки > Конфиденциальность > Управление компьютером")
         print("   2. Добавьте Terminal (или приложение) в список")
+
+    if engine_type == "remote_asr":
+        if checks.get("remote_asr_url", "").startswith("❌"):
+            print("⚠️ Remote ASR: создайте .env.local с LOCAL_AI_ASR_BASE_URL=http://YOUR_TAILSCALE_HOST:8001")
+        elif checks.get("remote_asr") != "✅":
+            print("⚠️ Remote ASR: проверьте Tailscale и ASR сервер:")
+            print("   tailscale status")
+            print("   curl $LOCAL_AI_ASR_BASE_URL/healthz")
     
     # Проверяем только те ключи, которые должны быть ✅ (исключаем "engine" - это просто название)
     check_keys = [k for k in checks.keys() if k != "engine"]
@@ -628,6 +768,11 @@ def main():
     parser = argparse.ArgumentParser(description="VTTv2 - Voice-to-Text для macOS")
     parser.add_argument("--health", action="store_true", help="Run health check")
     parser.add_argument("--config", default="config.yaml", help="Path to config.yaml")
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="Config profile (mac-m1-remote, mac-m4-local, …). Overrides config.yaml active_profile.",
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable DEBUG logging")
     parser.add_argument("--install", action="store_true", help="Install as launchd service")
     parser.add_argument("--uninstall", action="store_true", help="Uninstall launchd service")
@@ -645,15 +790,18 @@ def main():
         else:
             return service_status()
 
+    if args.profile:
+        os.environ.setdefault("VTT2_PROFILE", args.profile)
+
     if args.health:
-        return health_check_command(args.config)
+        return health_check_command(args.config, profile=args.profile)
 
     # --- Normal app start ---
     project_root = _resolve_project_root(args.config)
     config_file = project_root / args.config
 
     try:
-        config = Config.from_yaml(str(config_file), project_root)
+        config = Config.from_yaml(str(config_file), project_root, profile=args.profile)
     except Exception as e:
         print(f"Ошибка загрузки конфигурации: {e}")
         sys.exit(1)

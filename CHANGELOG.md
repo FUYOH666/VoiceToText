@@ -1,5 +1,45 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `docs/ROADMAP.md`, `docs/TECH_DEBT.md`, `.env.vtt2.example`
+- Lazy engine imports for `remote_asr` (no MLX load on edge Mac)
+
+## [2.0.0] - 2026-05-28
+
+### Added
+- **Branch `product-unified`**: profile-based config (`config/base.yaml` + `config/profiles/*`)
+- **Mac profiles**: `mac-m1-local`, `mac-m1-remote`, `mac-m4-local`, `mac-m4-remote`
+- **Linux F9** under `clients/linux/` (from legacy `main`)
+- **Shared** `vtt_asr_client` package for Mac remote ASR and Linux F9
+- **CLI** `--profile` / `VTT2_PROFILE`; health check shows active profile
+- Docs: `PRODUCT_MATRIX.md`, `ENTERPRISE_EDGE.md`, `CUTOVER_CHECKLIST.md`, `LEGACY_BRANCHES.md`
+- **Optional deps** `local-mlx` for edge-only installs without MLX wheels
+
+### Changed
+- **Secrets**: ASR URL only via `.env.local` / `LOCAL_AI_ASR_BASE_URL` (no Tailscale IP in git)
+- **Default profile**: `mac-m1-remote` in `config.yaml`
+- Project version **2.0.0** (`voicetotext` in `pyproject.toml`)
+
+### Fixed
+
+## [1.1.x] — mlx-v1.1 legacy
+
+### Fixed
+- **Иконка меню**: после остановки записи красная точка сменяется на «обработка» (`menu_bar.icon_processing`), а не висит как «идёт запись» до конца транскрипции
+
+### Changed
+- **Локальная MLX-модель по умолчанию**: `mlx-community/whisper-large-v3-turbo-q4` (Large v3 Turbo, Q4)
+- **Автозапуск**: launchd не даёт доступ к микрофону — рекомендуется Login Items (`start-vtt2.app`)
+- **Remote ASR**: по умолчанию используется удалённый ASR через TailScale вместо локального MLX Whisper
+
+### Added
+- **`scripts/prefetch_mlx_model.py`**: скачивает веса `mlx_whisper.model_name` из `config.yaml` в HF cache без запуска GUI VTT2
+- **start-vtt2.app**: AppleScript-приложение для Login Items (автозапуск с доступом к микрофону)
+- **Проверка тишины**: уведомление при записи без звука (нет доступа к микрофону)
+- **Уведомления**: при пустом результате, неудачной вставке, отсутствии микрофона
+
 ## [1.1.0] - 2026-03-02
 
 ### Added

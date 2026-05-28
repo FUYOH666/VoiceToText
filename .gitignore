@@ -42,6 +42,7 @@ logs/
 # Environment variables
 .env
 .env.local
+.env.vtt2
 
 # MLX Whisper cache (models are cached in ~/.cache/huggingface/hub/)
 # Don't commit model files - they're downloaded automatically
@@ -66,4 +67,7 @@ test_outputs/
 
 # Local config overrides (if any)
 config.local.yaml
+
+# Generated Login Items app (contains machine-specific path)
+start-vtt2.app/
 

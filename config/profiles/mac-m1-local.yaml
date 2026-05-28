@@ -1,0 +1,10 @@
+# MacBook Air/Pro M1 — 8GB RAM, local MLX
+
+transcription:
+  engine: mlx_whisper
+  mlx_whisper:
+    model_name: "mlx-community/whisper-large-v3-turbo-q4"
+    batch_size: 2
+
+performance:
+  memory_limit_mb: 4096

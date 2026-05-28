@@ -1,0 +1,8 @@
+# MacBook M4 — thin client, private ASR server
+# Set LOCAL_AI_ASR_BASE_URL in .env.local
+
+transcription:
+  engine: remote_asr
+
+performance:
+  memory_limit_mb: 4096

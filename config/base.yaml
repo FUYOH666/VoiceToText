@@ -1,0 +1,66 @@
+# Shared defaults for all Mac VTT2 profiles (no secrets, no engine-specific tuning)
+
+app:
+  version: "2.0.0"
+  name: "VTTv2"
+
+audio:
+  sample_rate: 16000
+  channels: 1
+  device_index: null
+  chunk_size: 1024
+  max_recording_duration: 7200
+
+ui:
+  auto_paste_enabled: true
+  auto_paste_method: cgevent
+  hotkey: "option+space"
+
+menu_bar:
+  icon_idle: "🎤"
+  icon_recording: "🔴"
+  icon_processing: "⏳"
+  show_status: true
+
+text_processing:
+  enabled: false
+
+performance:
+  use_neural_engine: true
+  max_concurrent_tasks: 1
+  auto_cleanup_enabled: true
+  cleanup_threshold_percent: 75
+  periodic_cleanup_interval: 10
+
+logging:
+  level: INFO
+  format: "%(asctime)s %(levelname)s %(name)s %(message)s"
+  file: null
+
+transcription:
+  remote_asr:
+    timeout: 60
+    model: "cstr/whisper-large-v3-turbo-int8_float32"
+    language: "auto"
+  mlx_whisper:
+    language: "auto"
+    temperature: 0.0
+    beam_size: 5
+    best_of: 5
+    no_speech_threshold: 0.6
+    compression_ratio_threshold: 2.4
+    chunk_size_seconds: 30
+    chunk_overlap_seconds: 2
+  whisper_cpp:
+    binary_path: "./whisper.cpp/build/bin/whisper-cli"
+    model_path: "./models/ggml-medium-q5_0.bin"
+    use_coreml: false
+    use_metal: true
+    threads: 4
+    language: "ru"
+    temperature: 0.0
+    beam_size: 5
+    best_of: 5
+    patience: 1.0
+    no_speech_threshold: 0.6
+    compression_ratio_threshold: 2.4

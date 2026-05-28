@@ -6,7 +6,14 @@ import yaml
 from pathlib import Path
 import os
 import tempfile
-from config.loader import Config, MLXWhisperConfig, WhisperCppConfig, TranscriptionConfig
+from config.loader import (
+    Config,
+    MAC_PROFILES,
+    MLXWhisperConfig,
+    WhisperCppConfig,
+    TranscriptionConfig,
+)
+from config.merge import deep_merge as merge_fn
 
 
 class TestConfigLoader:
@@ -22,12 +29,32 @@ class TestConfigLoader:
         assert config.transcription.mlx_whisper.model_name == "mlx-community/whisper-medium"
     
     def test_load_default_config(self, project_root):
-        """Тест загрузки конфигурации по умолчанию из config.yaml"""
+        """Тест загрузки layered конфигурации из config.yaml + profiles"""
         config_file = project_root / "config.yaml"
-        if config_file.exists():
+        if config_file.exists() and (project_root / "config" / "base.yaml").exists():
             config = Config.from_yaml(str(config_file), project_root)
             assert config.app.version is not None
-            assert config.transcription.engine in ["mlx_whisper", "whisper_cpp"]
+            assert config.transcription.engine in ["mlx_whisper", "whisper_cpp", "remote_asr"]
+            assert config.active_profile in MAC_PROFILES
+
+    def test_profile_mac_m1_remote(self, project_root):
+        config = Config.from_yaml("config.yaml", project_root, profile="mac-m1-remote")
+        assert config.active_profile == "mac-m1-remote"
+        assert config.transcription.engine == "remote_asr"
+
+    def test_profile_mac_m4_local(self, project_root):
+        config = Config.from_yaml("config.yaml", project_root, profile="mac-m4-local")
+        assert config.transcription.engine == "mlx_whisper"
+        assert "large-v3" in config.transcription.mlx_whisper.model_name
+
+    def test_deep_merge(self):
+        base = {"a": 1, "b": {"c": 2, "d": 3}}
+        overlay = {"b": {"d": 99}, "e": 5}
+        merged = merge_fn(base, overlay)
+        assert merged["a"] == 1
+        assert merged["b"]["c"] == 2
+        assert merged["b"]["d"] == 99
+        assert merged["e"] == 5
     
     def test_invalid_config_missing_field(self, project_root):
         """Тест обработки конфигурации с отсутствующими обязательными полями"""
@@ -77,7 +104,7 @@ class TestConfigLoader:
         config = MLXWhisperConfig()
         
         assert config.model_name == "mlx-community/whisper-medium"
-        assert config.language == "ru"
+        assert config.language == "auto"
         assert config.temperature == 0.0
         assert config.beam_size == 5
     

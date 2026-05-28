@@ -1,0 +1,12 @@
+# Linux F9 — desktop client, ASR on another host in Tailnet
+# Set LOCAL_AI_ASR_BASE_URL in .env.local
+
+asr:
+  base_url: "http://YOUR_ASR_HOST:8001"
+  transcription_endpoint: "/v1/audio/transcriptions"
+  timeout: 60
+  language: null
+  response_format: "json"
+
+hotkey:
+  key: "f9"

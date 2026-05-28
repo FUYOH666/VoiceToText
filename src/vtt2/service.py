@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -21,12 +22,11 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-def _find_uv() -> str:
-    """Locate the uv binary."""
+def _find_uv() -> str | None:
+    """Locate the uv binary. Returns None if not found."""
     uv_path = shutil.which("uv")
     if uv_path:
         return uv_path
-    # Common Homebrew / cargo locations
     for candidate in [
         Path.home() / ".cargo" / "bin" / "uv",
         Path("/opt/homebrew/bin/uv"),
@@ -34,31 +34,100 @@ def _find_uv() -> str:
     ]:
         if candidate.exists():
             return str(candidate)
-    raise FileNotFoundError(
-        "uv not found. Install it: https://docs.astral.sh/uv/getting-started/installation/"
-    )
+    return None
+
+
+def _program_args() -> list[str]:
+    """Return ProgramArguments for launchd: [executable, ...args] to run main.py."""
+    project = _project_root()
+    main_script = str(project / "src" / "vtt2" / "main.py")
+    venv_python = project / ".venv" / "bin" / "python"
+
+    # Prefer .venv directly — avoids uv sync (which can fail on rumps/build)
+    if venv_python.exists():
+        base_cmd = [str(venv_python), main_script]
+    else:
+        uv_path = _find_uv()
+        if uv_path:
+            base_cmd = [uv_path, "run", "python", main_script]
+        else:
+            base_cmd = [sys.executable, main_script]
+
+    # Wrapper: sleep 5s before start (lets GUI session initialize at login)
+    import shlex
+    safe_cmd = " ".join(shlex.quote(a) for a in base_cmd)
+    return ["/bin/sh", "-c", f"sleep 5 && exec {safe_cmd}"]
 
 
 def _render_plist() -> str:
-    """Read the template plist and replace placeholders with real paths."""
-    template_path = _project_root() / "service" / PLIST_NAME
-    if not template_path.exists():
-        raise FileNotFoundError(f"Plist template not found: {template_path}")
+    """Generate plist content with real paths."""
+    project = str(_project_root())
+    home = str(Path.home())
+    log_dir = Path(home) / "Library" / "Logs" / "vtt2"
 
-    content = template_path.read_text(encoding="utf-8")
-    replacements = {
-        "__UV_PATH__": _find_uv(),
-        "__PROJECT_DIR__": str(_project_root()),
-        "__HOME__": str(Path.home()),
-    }
-    for placeholder, value in replacements.items():
-        content = content.replace(placeholder, value)
-    return content
+    args = _program_args()
+    args_xml = "\n".join(f'        <string>{a}</string>' for a in args)
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{LABEL}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+{args_xml}
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>{project}</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>VTT2_LAUNCHD</key>
+        <string>1</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>LimitLoadToSessionType</key>
+    <array>
+        <string>Aqua</string>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>{log_dir}/vtt2.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{log_dir}/vtt2.stderr.log</string>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>
+"""
 
 
 def install_service() -> int:
     """Install VTT2 as a launchd LaunchAgent."""
     print(f"Installing VTT2 service ({LABEL})...")
+
+    uv_path = _find_uv()
+    if uv_path:
+        print(f"  Using: uv run python")
+    else:
+        print(f"  Using: {sys.executable} (uv not found)")
 
     # Unload if already installed
     if INSTALLED_PLIST.exists():
@@ -68,11 +137,7 @@ def install_service() -> int:
         )
 
     # Render and write plist
-    try:
-        plist_content = _render_plist()
-    except FileNotFoundError as exc:
-        print(f"Error: {exc}")
-        return 1
+    plist_content = _render_plist()
 
     LAUNCH_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
     INSTALLED_PLIST.write_text(plist_content, encoding="utf-8")

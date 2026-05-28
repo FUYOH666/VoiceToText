@@ -1,0 +1,10 @@
+# MacBook Pro M4 — local MLX, maximum quality
+
+transcription:
+  engine: mlx_whisper
+  mlx_whisper:
+    model_name: "mlx-community/whisper-large-v3-mlx"
+    batch_size: 6
+
+performance:
+  memory_limit_mb: 16384
