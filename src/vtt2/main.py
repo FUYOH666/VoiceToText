@@ -79,6 +79,19 @@ class VTT2App(rumps.App):
         )
         self.periodic_cleanup_interval = config.performance.periodic_cleanup_interval
         self.memory_manager.log_memory_usage("при старте")
+
+        engine = config.transcription.engine
+        model_info = ""
+        if engine == "mlx_whisper" and config.transcription.mlx_whisper:
+            model_info = f", модель={config.transcription.mlx_whisper.model_name}"
+        elif engine == "remote_asr":
+            model_info = ", ASR=remote (нужен доступный сервер)"
+        self.logger.info(
+            "Конфиг: profile=%s, engine=%s%s",
+            getattr(config, "active_profile", "?"),
+            engine,
+            model_info,
+        )
         
         # Инициализация компонентов
         self._init_components()
@@ -513,11 +526,17 @@ class VTT2App(rumps.App):
             "remote_asr": "Remote ASR (TailScale)",
         }.get(self.config.transcription.engine, self.config.transcription.engine)
         
+        profile = getattr(self.config, "active_profile", "—")
+        model_line = ""
+        if self.config.transcription.engine == "mlx_whisper" and self.config.transcription.mlx_whisper:
+            model_line = f"\nМодель: {self.config.transcription.mlx_whisper.model_name}"
+
         rumps.alert(
             "VTTv2",
             f"Voice-to-Text для macOS\n\n"
             f"Версия: {self.config.app.version}\n"
-            f"Движок: {engine_name}\n"
+            f"Профиль: {profile}\n"
+            f"Движок: {engine_name}{model_line}\n"
             f"Горячие клавиши: {self.config.ui.hotkey}"
         )
     

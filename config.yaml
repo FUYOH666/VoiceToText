@@ -1,5 +1,5 @@
 # VTT2 — active hardware/profile (see config/profiles/)
-# Override: VTT2_PROFILE=mac-m1-remote  or  --profile mac-m1-remote
-# Secrets (ASR URL): .env.local — copy from .env.example
+# Override: VTT2_PROFILE=mac-m1-local  or  --profile mac-m1-local
+# Remote ASR (mac-m1-remote): .env.local with LOCAL_AI_ASR_BASE_URL
 
-active_profile: mac-m1-remote
+active_profile: mac-m1-local

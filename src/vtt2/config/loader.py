@@ -21,7 +21,7 @@ MAC_PROFILES = (
     "mac-m4-local",
     "mac-m4-remote",
 )
-DEFAULT_PROFILE = "mac-m1-remote"
+DEFAULT_PROFILE = "mac-m1-local"
 PLACEHOLDER_ASR_URL = "http://YOUR_ASR_HOST:8001"
 
 

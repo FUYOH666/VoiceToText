@@ -6,6 +6,7 @@ from __future__ import annotations
 import io
 import logging
 import time
+from pathlib import Path
 
 import numpy as np
 import requests
@@ -26,9 +27,20 @@ class RemoteASRTranscriber:
 
         base_url = (self.asr_config.base_url or "").strip()
         if not base_url or "YOUR_ASR_HOST" in base_url:
+            repo_root = Path.cwd()
+            env_local = repo_root / ".env.local"
+            hint = (
+                "Создайте .env.local в корне репозитория:\n"
+                "  cp .env.example .env.local\n"
+                "  # укажите LOCAL_AI_ASR_BASE_URL=http://YOUR_TAILSCALE_HOST:8001"
+            )
+            if not env_local.is_file():
+                raise RuntimeError(
+                    "Remote ASR URL not configured: файл .env.local не найден.\n" + hint
+                )
             raise RuntimeError(
-                "Remote ASR URL not configured. Set LOCAL_AI_ASR_BASE_URL in .env.local "
-                "(see .env.example)."
+                "Remote ASR URL not configured: задайте LOCAL_AI_ASR_BASE_URL в .env.local "
+                "(см. .env.example)."
             )
 
         client_config = ASRClientConfig(

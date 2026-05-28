@@ -45,7 +45,10 @@ class TranscriptionEngineWrapper:
             from .remote_asr_engine import RemoteASRTranscriber
 
             self.engine = RemoteASRTranscriber(config)
-            logger.info("Используется движок: Remote ASR (TailScale)")
+            logger.warning(
+                "Используется движок: Remote ASR — нужен доступный ASR-сервер. "
+                "Для локального MLX: profile mac-m1-local в config.yaml и перезапуск."
+            )
         else:
             raise ValueError(f"Неизвестный движок: {engine_type}")
     
