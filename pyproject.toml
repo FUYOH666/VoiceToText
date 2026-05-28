@@ -1,6 +1,6 @@
 [project]
 name = "voicetotext"
-version = "2.1.0"
+version = "2.1.1"
 description = "Voice-to-Text: Mac menu-bar client and Linux F9 client with profile-based config"
 readme = "README.md"
 requires-python = ">=3.12"

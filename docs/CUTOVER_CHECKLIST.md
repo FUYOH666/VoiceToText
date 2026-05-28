@@ -1,34 +1,30 @@
-# Cutover checklist (phase A4)
+# Cutover checklist
 
-Complete before making `product-unified` the default branch.
+**Status:** cutover completed on `product-unified` (default branch, v2.1.0+).
 
 ## Automated / local
 
-- [x] `uv run pytest` — all green
-- [x] `git grep -E '100\.\d+\.\d+\.\d+'` — no Tailscale IPs in tracked files (CI enforces)
-- [ ] `vtt doctor --profile mac-m1-remote` — ASR ✅ when `.env.local` set (manual)
-- [ ] `vtt mac run --profile mac-m4-local --health` — MLX import OK (`--extra local-mlx`)
-- [x] `vtt validate-config` — all six profiles load
-- [x] `vtt linux run --profile linux-f9-local --health` — config path (manual on Linux box)
+- [x] `uv run pytest` — all green (CI on push)
+- [x] No Tailscale IPs in tracked config (CI grep)
+- [x] `vtt validate-config` — six profiles
+- [ ] `vtt doctor --profile mac-m1-remote` — when ASR server online
 
-## Manual smoke
+## Manual smoke (your machine)
 
-- [ ] M1: record + transcribe with `mac-m1-remote`
-- [ ] M4 (if available): local MLX with `mac-m4-local`
-- [ ] Linux (if available): F9 hotkey with `linux-f9-local`
+- [ ] **M1 local:** `./.venv/bin/python src/vtt2/main.py --profile mac-m1-local` → Option+Space → text pasted; log shows `mlx_engine`, not `remote_asr_engine`
+- [ ] M4 local MLX (if available)
+- [ ] Linux F9 hotkey (if available)
 
 ## Git / GitHub
 
-- [ ] Tag `legacy/mlx-v1.1-2026-05` on current `mlx-v1.1` tip
-- [ ] Tag `legacy/main-2026-05` on current `main` tip
-- [ ] Set default branch to `product-unified`
-- [x] Update README install links to `product-unified`
-- [ ] Do **not** delete `mlx-v1.1` or `main`
-- [ ] GitHub Release **v2.1.0** «Golden Standard»
+- [x] Tags `legacy/mlx-v1.1-2026-05`, `legacy/main-2026-05`
+- [x] Default branch `product-unified`
+- [x] Release v2.1.0 Golden Standard
+- [x] Release v2.1.1 (ship pass)
+- [x] Legacy branches not deleted
 
 ## Documentation
 
-- [x] [PRODUCT_MATRIX.md](PRODUCT_MATRIX.md) matches shipped profiles
-- [x] [ENTERPRISE_EDGE.md](ENTERPRISE_EDGE.md) + [enterprise/INSTALL.md](enterprise/INSTALL.md)
-- [x] [GOLDEN_STANDARD.md](GOLDEN_STANDARD.md)
-- [x] [CHANGELOG.md](../CHANGELOG.md) entry for 2.1.0
+- [x] PRODUCT_MATRIX, ENTERPRISE_EDGE, GOLDEN_STANDARD
+- [x] CHANGELOG 2.1.x
+- [x] TROUBLESHOOTING, CONTRIBUTING, SECURITY

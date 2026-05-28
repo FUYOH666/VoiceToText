@@ -1,58 +1,43 @@
-# Roadmap — VoiceToText product-unified
+# Roadmap — VoiceToText
 
-## Done (2.0.0 sandbox)
+Default branch: **`product-unified`**.
 
-- [x] Branch `product-unified` with profile-based config (Mac + Linux F9 profiles)
-- [x] Shared `vtt_asr_client` for remote ASR
-- [x] Secrets out of git (`.env.local` + `.env.example`)
-- [x] Docs: PRODUCT_MATRIX, ENTERPRISE_EDGE, CUTOVER_CHECKLIST, LEGACY_BRANCHES
+## Done (2.1.0 — Golden Standard)
 
-## Phase 1 — Stabilize Mac (1–2 weeks)
+- [x] Profile-based config (6 profiles)
+- [x] `vtt` CLI: doctor, validate-config, mac/linux run
+- [x] Shared `vtt_asr_client`
+- [x] Whisper tail artifacts + tests
+- [x] CI: pytest, IP grep, profile matrix, mock ASR
+- [x] Docs: GOLDEN_STANDARD, asr-api, enterprise/INSTALL
+- [x] Release v2.1.0, legacy tags, default branch cutover
 
-| Item | Why | Done when |
-|------|-----|-----------|
-| Push + default smoke on M1 `mac-m1-remote` | Real-world validation | Health + one recording |
-| `.env.vtt2.example` aligned with profiles | Login Items / launchd | Documented in README |
-| Fix `uv sync` on fresh clone (rumps/packaging) | Reproducible install | CI or README workaround verified |
-| Optional MLX: lazy import | Edge Mac never loads mlx | `engine=remote_asr` starts without mlx import |
-| Whisper tail artifact stripping in VTT2 | Parity with mlx-v1.1 marketing | Config flag wired in text pipeline |
+## Done (2.1.1 — Ship pass)
 
-## Phase 2 — Linux product (2–3 weeks)
+- [x] F9 env leak fix (`linux-f9-local` vs `.env.local`)
+- [x] Default profile `mac-m1-local`
+- [x] TROUBLESHOOTING, CONTRIBUTING, SECURITY, issue templates
+- [x] README polish + README.ru
+- [x] GitHub About / topics update
 
-| Item | Why | Done when |
-|------|-----|-----------|
-| F9 uses `F9Config.from_profile()` in `main.py` | Single config source | No local `clients/linux/config.yaml` drift |
-| Root `uv` workspace or documented dual install | One lockfile story | `uv sync` from repo root for F9 |
-| F9 health CLI | Ops | `f9-asr --health` checks ASR |
-| Integrate F9 into PRODUCT_MATRIX CI | Regression | pytest + smoke job |
-
-## Phase 3 — Enterprise kit (3–4 weeks)
-
-| Item | Why | Done when |
-|------|-----|-----------|
-| Install guide PDF/Markdown bundle | B2B sales | Tailscale + ASR + Mac profile |
-| OpenAPI snippet for ASR contract | Client/server boundary | `docs/asr-api.md` |
-| Profile validator CLI | Onboarding | `uv run python -m vtt2.config validate` |
-| Telemetry-off audit log (local only) | Compliance narrative | Optional file log of request metadata |
-
-## Phase 4 — Cutover (after matrix green)
-
-See [CUTOVER_CHECKLIST.md](CUTOVER_CHECKLIST.md):
-
-- Tags `legacy/mlx-v1.1-*`, `legacy/main-*`
-- GitHub default branch → `product-unified`
-- Archive notice on old branches
-
-## Phase 5 — Monorepo polish (optional)
+## Next (2.2.x)
 
 | Item | Why |
 |------|-----|
-| `apps/macos-vtt2`, `apps/linux-f9`, `packages/*` | Variant C from architecture audit |
-| GitHub Actions: pytest, no IP grep, profile matrix | CI gate |
-| Single semver release (GitHub Release) | Product versioning |
+| Demo GIF in README | Onboarding |
+| `uv` workspace (single lockfile) | Linux + Mac one install |
+| Prefetch MLX in `vtt doctor` | First-run UX |
+| GitHub Discussions | Community Q&A |
+| Optional local audit log (no telemetry) | Enterprise narrative |
 
-## Non-goals (for now)
+## Enterprise (ongoing)
 
-- Merging `main` and `mlx-v1.1` git histories
-- Embedding ASR server into this repo (stays separate GPU deploy)
-- Public SaaS / cloud STT integration
+- Install bundle: [enterprise/INSTALL.md](enterprise/INSTALL.md)
+- Private ASR contract: [asr-api.md](asr-api.md)
+
+## Non-goals
+
+- Merge `main` and `mlx-v1.1` histories
+- ASR GPU server inside this repo
+- Public cloud STT as default
+- Telemetry / phone-home

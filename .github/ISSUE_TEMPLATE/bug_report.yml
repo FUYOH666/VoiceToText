@@ -1,0 +1,59 @@
+name: Bug report
+description: Something does not work as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS (VTT2 menu bar)
+        - Linux (F9)
+    validations:
+      required: true
+  - type: input
+    id: profile
+    attributes:
+      label: Profile
+      description: e.g. mac-m1-local, mac-m1-remote
+      placeholder: mac-m1-local
+    validations:
+      required: true
+  - type: input
+    id: engine
+    attributes:
+      label: Engine from log
+      description: mlx_whisper or remote_asr
+      placeholder: mlx_whisper
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: 1. Run ... 2. Press Option+Space ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines (no secrets)
+      description: Do not paste Tailscale IPs or tokens
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Checklist
+      options:
+        - label: I removed IPs and tokens from this report
+          required: true

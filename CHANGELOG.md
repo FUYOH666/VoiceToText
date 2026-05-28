@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-05-28
+
+### Fixed
+- **F9 config:** `LOCAL_AI_ASR_BASE_URL` in `.env.local` no longer overrides `linux-f9-local` (only `linux-f9-edge`)
+
+### Changed
+- **Default profile:** `mac-m1-local` (local MLX on M1) in `config.yaml`
+- Startup log shows active profile, engine, and MLX model name
+- Clearer errors when `.env.local` is missing for remote ASR
+
+### Added
+- [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), GitHub issue/PR templates
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md), [README.ru.md](README.ru.md)
+- README badges and «free & private» positioning
+
 ## [2.1.0] - 2026-05-28 — Golden Standard
 
 ### Added
