@@ -1,0 +1,22 @@
+# F9 Linux client defaults (merged with config/profiles/linux-f9-*.yaml)
+
+audio:
+  sample_rate: 16000
+  channels: 1
+  format: "S16_LE"
+  device: null
+  temp_dir: "/tmp/f9-asr-recordings"
+  max_duration: 0
+  cleanup_max_age_hours: 24
+
+hotkey:
+  key: "f9"
+  pid_file: "/tmp/f9-asr-recording.pid"
+
+ui:
+  show_notifications: true
+  copy_to_clipboard: true
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s · %(levelname)s · %(name)s · %(message)s"

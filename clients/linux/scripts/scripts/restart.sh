@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# shellcheck source=_vtt_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_vtt_env.sh"
+
 # VoiceToText-Linux-F9: Restart Script
 # Полный перезапуск приложения с новой конфигурацией
 
@@ -36,18 +39,15 @@ echo "=============================================="
 
 # Шаг 1: Проверка конфигурации
 print_step "1. Проверка конфигурации..."
-CONFIG_FILE="/home/ai/Документы/dev/VTT-Linux/config.yaml"
+CONFIG_FILE="${VTT_REPO_ROOT}/config/profiles/${F9_PROFILE}.yaml"
 if [ ! -f "$CONFIG_FILE" ]; then
-    print_error "Конфигурационный файл не найден: $CONFIG_FILE"
+    print_error "Profile not found: $CONFIG_FILE"
     exit 1
 fi
 
-# Чтение текущих настроек
-CURRENT_MODEL=$(grep "^model:" "$CONFIG_FILE" | cut -d':' -f2 | sed 's/ *//g; s/"//g')
-CURRENT_LANG=$(grep "^language:" "$CONFIG_FILE" | cut -d':' -f2 | sed 's/ *//g; s/"//g')
-
-print_info "Текущая модель: $CURRENT_MODEL"
-print_info "Текущий язык: $CURRENT_LANG"
+CURRENT_LANG=$(grep -A20 "^asr:" "$CONFIG_FILE" | grep "language:" | head -1 | cut -d':' -f2 | sed 's/ *//g')
+print_info "Profile: $F9_PROFILE"
+print_info "ASR language: ${CURRENT_LANG:-auto}"
 
 # Шаг 2: Остановка всех процессов
 print_step "2. Остановка всех процессов Whisper..."

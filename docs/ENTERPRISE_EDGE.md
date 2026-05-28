@@ -35,8 +35,10 @@
    LOCAL_AI_ASR_TIMEOUT=60
    ```
 
-4. Install Mac client: `uv sync --extra local-mlx` only if any machine needs **local** MLX; edge-only Macs: `uv sync` without MLX extra.
-5. Run `uv run python src/vtt2/main.py --profile mac-m1-remote --health`.
+4. Install Mac client: `uv sync --extra mac`; add `--extra local-mlx` only for offline MLX machines.
+5. Run `vtt doctor --profile mac-m1-remote` then `vtt mac run --profile mac-m1-remote`.
+
+See [enterprise/INSTALL.md](enterprise/INSTALL.md) and [asr-api.md](asr-api.md).
 
 ## Security notes
 

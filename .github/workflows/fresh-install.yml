@@ -1,0 +1,23 @@
+name: Fresh install
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [product-unified]
+    paths:
+      - pyproject.toml
+      - uv.lock
+
+jobs:
+  mac-sync:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.8"
+      - name: uv sync (edge Mac)
+        run: uv sync --extra dev --extra mac
+      - name: uv sync with local MLX
+        run: uv sync --extra dev --extra mac --extra local-mlx

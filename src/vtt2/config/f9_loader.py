@@ -62,17 +62,33 @@ class F9Config(BaseModel):
             raise ValueError(
                 f"Unknown F9 profile {profile_name!r}; expected one of {VALID_F9_PROFILES}"
             )
+        base_path = project_root / "config" / "f9_base.yaml"
         profile_path = project_root / "config" / "profiles" / f"{profile_name}.yaml"
         if not profile_path.exists():
             raise FileNotFoundError(f"F9 profile not found: {profile_path}")
 
+        data: dict[str, Any] = {}
+        if base_path.is_file():
+            with open(base_path, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
         with open(profile_path, encoding="utf-8") as f:
-            data: dict[str, Any] = yaml.safe_load(f) or {}
+            profile_data = yaml.safe_load(f) or {}
+        data = deep_merge(data, profile_data)
 
         cls._load_env_file(project_root / ".env.local")
         data = cls._apply_local_ai_asr_env(data)
 
         return cls(**data)
+
+    @classmethod
+    def load_merged_dict(
+        cls,
+        project_root: Path,
+        profile: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Merged YAML dict for f9_asr.config.Config.from_dict()."""
+        cfg = cls.from_profile(project_root, profile=profile)
+        return cfg.model_dump()
 
     @staticmethod
     def _load_env_file(path: Path) -> None:

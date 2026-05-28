@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [product-unified, main, mlx-v1.1]
+  pull_request:
+    branches: [product-unified]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.6.14"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.8"
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Secret scan in config
+        run: |
+          ! git grep -E '100\.[0-9]+\.[0-9]+\.[0-9]+' -- config ':!config/profiles/linux-f9-edge.yaml' || \
+            (echo "Tailscale IP found in config" && exit 1)
+          ! git grep -E '/Users/[^/]+' -- config README docs src clients || true
+
+      - name: Version sync check
+        run: |
+          uv run python scripts/sync_version.py
+          git diff --exit-code config/base.yaml
+
+      - name: Pytest
+        run: uv run pytest tests/ -q
+
+      - name: Validate profiles
+        run: uv run python -m vtt.cli validate-config
+
+  profile-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        profile:
+          - mac-m1-remote
+          - mac-m4-local
+          - linux-f9-local
+          - linux-f9-edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.8"
+      - run: uv sync --extra dev
+      - name: Load profile config
+        run: |
+          uv run python -c "
+          from pathlib import Path
+          import sys
+          root = Path('.').resolve()
+          p = '${{ matrix.profile }}'
+          if p.startswith('mac'):
+              sys.path.insert(0, str(root / 'src' / 'vtt2'))
+              from config.loader import Config
+              Config.from_yaml('config.yaml', root, profile=p)
+              print('OK', p)
+          else:
+              sys.path.insert(0, str(root / 'src' / 'vtt2'))
+              from config.f9_loader import F9Config
+              F9Config.from_profile(root, profile=p)
+              print('OK', p)
+          "
+
+  asr-client-mock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.8"
+      - run: uv sync --extra dev
+      - name: Mock ASR transcribe
+        run: |
+          uv run python -c "
+          from pytest_httpserver import HTTPServer
+          from vtt_asr_client.client import ASRClient, ASRClientConfig
+          server = HTTPServer()
+          server.expect_request('/v1/audio/transcriptions', method='POST').respond_with_json({'text': 'hi'})
+          server.expect_request('/healthz', method='GET').respond_with_data('ok')
+          cfg = ASRClientConfig(base_url=server.url_for(''), timeout=5)
+          c = ASRClient(cfg)
+          assert c.healthz()
+          assert c.transcribe_bytes(b'RIFF', filename='a.wav') == 'hi'
+          print('mock ASR OK')
+          "

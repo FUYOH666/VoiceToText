@@ -3,7 +3,11 @@
 # VoiceToText-Linux-F9: Switch Model Script
 # Переключение модели распознавания речи
 
-CONFIG_FILE="/home/ai/Документы/dev/VTT-Linux/config.yaml"
+# shellcheck source=_vtt_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_vtt_env.sh"
+echo "Deprecated. Use vtt linux run and config/profiles/. Exiting."
+exit 1
+CONFIG_FILE="${VTT_REPO_ROOT}/config/profiles/${F9_PROFILE}.yaml"
 WHISPER_MODELS_DIR="/home/ai/Projects/whisper.cpp/models"
 
 # Цвета для вывода

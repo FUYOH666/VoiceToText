@@ -1,10 +1,14 @@
 #!/bin/bash
 
-# VoiceToText-Linux-F9: Main Toggle Script
-# Читает настройки из config.yaml для гибкой конфигурации
+# shellcheck source=_vtt_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_vtt_env.sh"
 
-# Configuration from config.yaml
-CONFIG_FILE="/home/ai/Документы/dev/VTT-Linux/config.yaml"
+echo "This script is legacy (local whisper-cli). Use from repo root: vtt linux run --profile ${F9_PROFILE}"
+exit 1
+
+# VoiceToText-Linux-F9: Main Toggle Script (deprecated)
+
+CONFIG_FILE="${VTT_REPO_ROOT}/clients/linux/config.yaml"
 
 # Read settings from config
 WHISPER_PATH=$(grep "^whisper_path:" "$CONFIG_FILE" | cut -d':' -f2 | sed 's/ *//g; s/"//g')

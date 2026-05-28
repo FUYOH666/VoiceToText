@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 import logging
 from pathlib import Path
-from typing import Any, Optional, Literal
+from typing import Any, List, Optional, Literal
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 import yaml
 
@@ -126,6 +126,14 @@ class MenuBarConfig(BaseModel):
 class TextProcessingConfig(BaseModel):
     """Конфигурация постобработки текста"""
     enabled: bool = Field(False, description="Включена постобработка")
+    strip_whisper_tail_artifacts: bool = Field(
+        True,
+        description="Удалять типичные хвостовые фразы Whisper перед вставкой",
+    )
+    whisper_artifact_languages: List[Literal["ru", "en"]] = Field(
+        default_factory=lambda: ["ru", "en"],
+        description="Языки списков артефактов (ru/en)",
+    )
 
 
 class PerformanceConfig(BaseModel):

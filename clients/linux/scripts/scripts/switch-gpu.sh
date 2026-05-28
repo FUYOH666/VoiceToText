@@ -3,7 +3,11 @@
 # VoiceToText-Linux-F9: Switch GPU/CPU Script
 # Переключение между GPU и CPU для транскрибации
 
-CONFIG_FILE="/home/ai/Документы/dev/VTT-Linux/config.yaml"
+# shellcheck source=_vtt_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_vtt_env.sh"
+echo "Deprecated. Remote ASR runs on GPU server, not this client."
+exit 1
+CONFIG_FILE="${VTT_REPO_ROOT}/config/profiles/${F9_PROFILE}.yaml"
 
 # Цвета для вывода
 RED='\033[0;31m'

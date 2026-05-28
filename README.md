@@ -11,12 +11,14 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/FUYOH666/VoiceToText.git
 cd VoiceToText
 git checkout product-unified
-uv sync
+uv sync --extra mac
 cp .env.example .env.local
 # Edit .env.local: LOCAL_AI_ASR_BASE_URL=http://YOUR_TAILSCALE_HOST:8001
-uv run python src/vtt2/main.py --profile mac-m1-remote --health
-uv run python src/vtt2/main.py
+vtt doctor --profile mac-m1-remote
+vtt mac run --profile mac-m1-remote
 ```
+
+Golden standard: [docs/GOLDEN_STANDARD.md](docs/GOLDEN_STANDARD.md)
 
 Press **Option+Space** to record; text is transcribed on your ASR server and pasted into the active app.
 
@@ -41,8 +43,10 @@ uv run python src/vtt2/main.py --profile mac-m1-remote --health
 
 ## Dependencies
 
-- **Remote / edge Mac:** `uv sync` (no MLX download)
-- **Local MLX on Mac:** `uv sync --extra local-mlx`
+- **Mac menu-bar app:** `uv sync --extra mac`
+- **Remote / edge Mac:** no MLX extra
+- **Local MLX on Mac:** `uv sync --extra mac --extra local-mlx`
+- **Linux F9 only:** `uv sync` (core deps)
 
 ## Configuration layers
 
@@ -63,16 +67,29 @@ Microphone, Accessibility (hotkey), Input Monitoring (paste) — all required.
 
 Prefer **Login Items** with `start-vtt2.app`; launchd often lacks microphone access. See [CHANGELOG.md](CHANGELOG.md).
 
+## Unified CLI
+
+```bash
+vtt profiles list
+vtt validate-config
+vtt doctor
+vtt mac run --profile mac-m1-remote
+vtt linux run --profile linux-f9-local --health
+```
+
 ## Development
 
 ```bash
+uv sync --extra dev --extra mac
 uv run pytest
-uv run python src/vtt2/main.py --verbose
+vtt validate-config
 ```
 
 ## Docs
 
+- [Golden standard](docs/GOLDEN_STANDARD.md) · [ASR API contract](docs/asr-api.md)
 - [Product matrix](docs/PRODUCT_MATRIX.md) · [Enterprise Edge](docs/ENTERPRISE_EDGE.md)
+- [Enterprise install](docs/enterprise/INSTALL.md)
 - [Roadmap](docs/ROADMAP.md) · [Technical debt](docs/TECH_DEBT.md) · [Cutover checklist](docs/CUTOVER_CHECKLIST.md)
 
 ## Cutover

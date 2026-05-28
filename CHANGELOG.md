@@ -2,9 +2,24 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-05-28 — Golden Standard
+
 ### Added
-- `docs/ROADMAP.md`, `docs/TECH_DEBT.md`, `.env.vtt2.example`
-- Lazy engine imports for `remote_asr` (no MLX load on edge Mac)
+- **`vtt` CLI**: `doctor`, `mac run`, `linux run`, `profiles list`, `validate-config`
+- **Whisper tail artifacts**: `strip_trailing_whisper_artifacts` + `docs/WHISPER_ARTIFACTS.md`
+- **F9 on profiles**: `F9Config.from_profile()`, `--profile` / `F9_PROFILE`
+- **`config/f9_base.yaml`**, `scripts/sync_version.py` (semver = pyproject = base.yaml)
+- **CI**: `.github/workflows/ci.yml` (pytest, IP grep, profile matrix, mock ASR)
+- **Fresh install**: `.github/workflows/fresh-install.yml` (macOS `uv sync --extra mac`)
+- **Docs**: `GOLDEN_STANDARD.md`, `asr-api.md`, `docs/enterprise/INSTALL.md`
+- **Optional `mac` extra**: GUI/audio deps for CI-friendly core install on Linux
+
+### Changed
+- Linux scripts: no hardcoded `/home/ai/...`; deprecated toggles point to `vtt linux run`
+- README / cutover checklist aligned with golden standard flow
+
+### Fixed
+- Regression: whisper artifact stripping missing on `product-unified`
 
 ## [2.0.0] - 2026-05-28
 

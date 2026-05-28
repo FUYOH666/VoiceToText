@@ -86,17 +86,12 @@ class Config(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     @classmethod
-    def from_yaml(cls, config_path: Path) -> "Config":
-        """Load configuration from YAML file."""
-        if not config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {config_path}")
-
-        with open(config_path, "r", encoding="utf-8") as f:
-            yaml_data = yaml.safe_load(f)
-
-        # Convert nested dicts to config objects
+    def from_dict(cls, yaml_data: dict) -> "Config":
+        """Load configuration from a nested dict (YAML-shaped)."""
         config_dict = {}
         for section, section_config in yaml_data.items():
+            if section_config is None:
+                continue
             if section == "asr":
                 config_dict["asr"] = ASRConfig(**section_config)
             elif section == "audio":
@@ -107,8 +102,44 @@ class Config(BaseSettings):
                 config_dict["ui"] = UIConfig(**section_config)
             elif section == "logging":
                 config_dict["logging"] = LoggingConfig(**section_config)
-
         return cls(**config_dict)
+
+    @classmethod
+    def from_yaml(cls, config_path: Path) -> "Config":
+        """Load configuration from YAML file (legacy path)."""
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            yaml_data = yaml.safe_load(f) or {}
+
+        return cls.from_dict(yaml_data)
+
+    @classmethod
+    def find_repo_root(cls, start: Path | None = None) -> Path:
+        """Walk up to repository root (config/profiles)."""
+        current = (start or Path.cwd()).resolve()
+        for candidate in [current, *current.parents]:
+            if (candidate / "config" / "profiles").is_dir():
+                return candidate
+        raise FileNotFoundError(
+            "Repository root not found (expected config/profiles/). "
+            "Run from VoiceToText repo root."
+        )
+
+    @classmethod
+    def from_profile(cls, profile: str | None = None, repo_root: Path | None = None) -> "Config":
+        """Load F9 config: config/f9_base.yaml + config/profiles/linux-f9-*.yaml."""
+        root = repo_root or cls.find_repo_root()
+        vtt2_src = root / "src" / "vtt2"
+        import sys
+
+        if str(vtt2_src) not in sys.path:
+            sys.path.insert(0, str(vtt2_src))
+        from config.f9_loader import F9Config
+
+        data = F9Config.load_merged_dict(root, profile=profile)
+        return cls.from_dict(data)
 
     def setup_logging(self) -> None:
         """Setup logging configuration."""

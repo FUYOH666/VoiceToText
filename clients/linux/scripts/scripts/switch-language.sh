@@ -3,7 +3,11 @@
 # VoiceToText-Linux-F9: Switch Language Script
 # Переключение языка распознавания речи
 
-CONFIG_FILE="/home/ai/Документы/dev/VTT-Linux/config.yaml"
+# shellcheck source=_vtt_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_vtt_env.sh"
+echo "Deprecated. Edit config/profiles/linux-f9-*.yaml or use vtt validate-config."
+exit 1
+CONFIG_FILE="${VTT_REPO_ROOT}/config/profiles/${F9_PROFILE}.yaml"
 
 # Цвета для вывода
 RED='\033[0;31m'
