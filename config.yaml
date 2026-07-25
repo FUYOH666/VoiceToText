@@ -1,13 +1,27 @@
 # VTTv2 Configuration
 
 app:
-  version: "1.2.9"
+  version: "1.3.0"
   name: "VTTv2"
 
-# ⭐ Движок транскрипции
+# Локальный STT HTTP (владелец mlx_whisper). Menubar и агенты — клиенты.
+stt_server:
+  host: "127.0.0.1"
+  port: 8765
+  max_upload_mb: 25
+  request_timeout_seconds: 600
+  engine: mlx_whisper  # mlx_whisper | whisper_cpp — что грузит ai.vtt2.stt
+
+# ⭐ Движок транскрипции (menubar)
 transcription:
-  # remote_asr — когда GPU ASR снова в сети; сейчас — локальный MLX
-  engine: mlx_whisper  # mlx_whisper | whisper_cpp | remote_asr
+  # local_stt — HTTP к ai.vtt2.stt (одна модель в RAM)
+  # mlx_whisper / whisper_cpp — in-process (два резидента, если STT тоже запущен)
+  # remote_asr — удалённый GPU ASR
+  engine: local_stt  # local_stt | mlx_whisper | whisper_cpp | remote_asr
+  local_stt:
+    base_url: "http://127.0.0.1:8765"
+    path: "/v1/audio/transcriptions"
+    timeout_seconds: 600
   mlx_whisper:
     # Модель MLX (автоматически скачивается при первом использовании)
     # Доступные модели: mlx-community/whisper-tiny-mlx, whisper-small-mlx, whisper-medium-mlx, whisper-large-v3-mlx

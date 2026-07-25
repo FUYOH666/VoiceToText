@@ -27,7 +27,12 @@ class TestConfigLoader:
         if config_file.exists():
             config = Config.from_yaml(str(config_file), project_root)
             assert config.app.version is not None
-            assert config.transcription.engine in ["mlx_whisper", "whisper_cpp", "remote_asr"]
+            assert config.transcription.engine in [
+                "mlx_whisper",
+                "whisper_cpp",
+                "remote_asr",
+                "local_stt",
+            ]
     
     def test_invalid_config_missing_field(self, project_root):
         """Тест обработки конфигурации с отсутствующими обязательными полями"""

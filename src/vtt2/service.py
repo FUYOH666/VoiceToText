@@ -1,6 +1,6 @@
 """
 launchd service management for VTT2.
-Install / uninstall / status via LaunchAgent plist.
+Install / uninstall / status for menubar (ai.vtt2) and STT HTTP (ai.vtt2.stt).
 """
 import logging
 import os
@@ -10,10 +10,18 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-LABEL = "ai.vtt2"
-PLIST_NAME = f"{LABEL}.plist"
+UI_LABEL = "ai.vtt2"
+STT_LABEL = "ai.vtt2.stt"
+UI_PLIST_NAME = f"{UI_LABEL}.plist"
+STT_PLIST_NAME = f"{STT_LABEL}.plist"
 LAUNCH_AGENTS_DIR = Path.home() / "Library" / "LaunchAgents"
-INSTALLED_PLIST = LAUNCH_AGENTS_DIR / PLIST_NAME
+INSTALLED_UI_PLIST = LAUNCH_AGENTS_DIR / UI_PLIST_NAME
+INSTALLED_STT_PLIST = LAUNCH_AGENTS_DIR / STT_PLIST_NAME
+
+# Back-compat aliases used by older call sites / docs
+LABEL = UI_LABEL
+PLIST_NAME = UI_PLIST_NAME
+INSTALLED_PLIST = INSTALLED_UI_PLIST
 
 
 def _project_root() -> Path:
@@ -26,11 +34,11 @@ def _find_uv() -> str:
     uv_path = shutil.which("uv")
     if uv_path:
         return uv_path
-    # Common Homebrew / cargo locations
     for candidate in [
         Path.home() / ".cargo" / "bin" / "uv",
         Path("/opt/homebrew/bin/uv"),
         Path("/usr/local/bin/uv"),
+        Path.home() / ".local" / "bin" / "uv",
     ]:
         if candidate.exists():
             return str(candidate)
@@ -40,7 +48,7 @@ def _find_uv() -> str:
 
 
 def _load_env_vtt2() -> dict[str, str]:
-    """Load KEY=VALUE from .env.vtt2 (gitignored). Used for remote_asr host etc."""
+    """Load KEY=VALUE from .env.vtt2 (gitignored)."""
     env_file = _project_root() / ".env.vtt2"
     if not env_file.exists():
         return {}
@@ -60,26 +68,28 @@ def _env_vars_xml(env: dict[str, str]) -> str:
     if not env:
         return ""
     lines = [
-        '    <key>EnvironmentVariables</key>',
-        '    <dict>',
+        "    <key>EnvironmentVariables</key>",
+        "    <dict>",
     ]
     for k, v in env.items():
         escaped = v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        lines.append(f'        <key>{k}</key>')
-        lines.append(f'        <string>{escaped}</string>')
+        lines.append(f"        <key>{k}</key>")
+        lines.append(f"        <string>{escaped}</string>")
     lines.append("    </dict>")
     return "\n".join(lines) + "\n\n"
 
 
-def _render_plist() -> str:
-    """Read the template plist and replace placeholders with real paths."""
-    template_path = _project_root() / "service" / PLIST_NAME
+def _render_plist(plist_name: str) -> str:
+    """Read template plist and replace placeholders."""
+    template_path = _project_root() / "service" / plist_name
     if not template_path.exists():
         raise FileNotFoundError(f"Plist template not found: {template_path}")
 
     content = template_path.read_text(encoding="utf-8")
-
     env = _load_env_vtt2()
+    # Menubar must use local_stt client; do not force mlx_whisper via stale env
+    if plist_name == UI_PLIST_NAME:
+        env.pop("VTT2_TRANSCRIPTION_ENGINE", None)
     env_xml = _env_vars_xml(env)
 
     replacements = {
@@ -93,109 +103,126 @@ def _render_plist() -> str:
     return content
 
 
-def install_service() -> int:
-    """Install VTT2 as a launchd LaunchAgent."""
-    print(f"Installing VTT2 service ({LABEL})...")
-
-    # Unload if already installed
-    if INSTALLED_PLIST.exists():
+def _unload(plist_path: Path) -> None:
+    if plist_path.exists():
         subprocess.run(
-            ["launchctl", "unload", str(INSTALLED_PLIST)],
+            ["launchctl", "unload", str(plist_path)],
             capture_output=True,
         )
 
-    # Render and write plist
-    try:
-        env_vtt2 = _load_env_vtt2()
-        if env_vtt2:
-            print(f"  .env.vtt2: загружено {len(env_vtt2)} переменных (remote_asr и др.)")
-        plist_content = _render_plist()
-    except FileNotFoundError as exc:
-        print(f"Error: {exc}")
-        return 1
 
-    LAUNCH_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
-    INSTALLED_PLIST.write_text(plist_content, encoding="utf-8")
-    print(f"  Plist written to {INSTALLED_PLIST}")
-
-    # Create log directory
-    log_dir = Path.home() / "Library" / "Logs" / "vtt2"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    # Load the service
-    result = subprocess.run(
-        ["launchctl", "load", str(INSTALLED_PLIST)],
+def _load(plist_path: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["launchctl", "load", str(plist_path)],
         capture_output=True,
         text=True,
     )
+
+
+def _install_one(label: str, plist_name: str, installed: Path) -> int:
+    print(f"Installing {label}...")
+    _unload(installed)
+    try:
+        content = _render_plist(plist_name)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}")
+        return 1
+    LAUNCH_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+    installed.write_text(content, encoding="utf-8")
+    print(f"  Plist written to {installed}")
+    result = _load(installed)
     if result.returncode != 0:
-        print(f"  Warning: launchctl load returned {result.returncode}: {result.stderr.strip()}")
+        print(
+            f"  Warning: launchctl load returned {result.returncode}: "
+            f"{(result.stderr or '').strip()}"
+        )
     else:
         print("  Service loaded successfully.")
+    return 0
+
+
+def install_service() -> int:
+    """Install STT then menubar LaunchAgents."""
+    print("Installing VTTv2 services (STT + menubar)...")
+    log_dir = Path.home() / "Library" / "Logs" / "vtt2"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    env_vtt2 = _load_env_vtt2()
+    if env_vtt2:
+        print(f"  .env.vtt2: загружено {len(env_vtt2)} переменных")
+
+    # STT first — owns the model; menubar is the client
+    rc = _install_one(STT_LABEL, STT_PLIST_NAME, INSTALLED_STT_PLIST)
+    if rc != 0:
+        return rc
+    rc = _install_one(UI_LABEL, UI_PLIST_NAME, INSTALLED_UI_PLIST)
+    if rc != 0:
+        return rc
 
     print()
-    print("VTT2 will now start automatically on login.")
-    print("  Stop:    launchctl unload ~/Library/LaunchAgents/ai.vtt2.plist")
-    print("  Start:   launchctl load   ~/Library/LaunchAgents/ai.vtt2.plist")
-    print("  Logs:    ~/Library/Logs/vtt2/")
+    print("Both services start on login.")
+    print("  STT API: http://127.0.0.1:8765  (see docs/STT_API.md)")
+    print("  Stop STT:  launchctl unload ~/Library/LaunchAgents/ai.vtt2.stt.plist")
+    print("  Stop UI:   launchctl unload ~/Library/LaunchAgents/ai.vtt2.plist")
+    print("  Logs:      ~/Library/Logs/vtt2/")
     return 0
 
 
 def uninstall_service() -> int:
-    """Uninstall the VTT2 LaunchAgent."""
-    print(f"Uninstalling VTT2 service ({LABEL})...")
-
-    if not INSTALLED_PLIST.exists():
-        print("  Service is not installed.")
-        return 0
-
-    result = subprocess.run(
-        ["launchctl", "unload", str(INSTALLED_PLIST)],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        print(f"  Warning: launchctl unload returned {result.returncode}: {result.stderr.strip()}")
-
-    INSTALLED_PLIST.unlink(missing_ok=True)
-    print("  Service uninstalled. It will no longer start on login.")
+    """Uninstall both LaunchAgents."""
+    print("Uninstalling VTTv2 services...")
+    for label, path in (
+        (UI_LABEL, INSTALLED_UI_PLIST),
+        (STT_LABEL, INSTALLED_STT_PLIST),
+    ):
+        print(f"  {label}...")
+        if not path.exists():
+            print("    not installed")
+            continue
+        _unload(path)
+        path.unlink(missing_ok=True)
+        print("    uninstalled")
     return 0
 
 
-def service_status() -> int:
-    """Show current VTT2 service status."""
-    print(f"VTT2 service status ({LABEL}):")
-    print()
-
-    if not INSTALLED_PLIST.exists():
+def _print_one_status(label: str, installed: Path) -> None:
+    print(f"{label}:")
+    if not installed.exists():
         print("  Installed: No")
-        return 0
-
-    print(f"  Installed: Yes ({INSTALLED_PLIST})")
-
+        return
+    print(f"  Installed: Yes ({installed})")
     result = subprocess.run(
         ["launchctl", "list"],
         capture_output=True,
         text=True,
     )
     for line in result.stdout.splitlines():
-        if LABEL in line:
-            parts = line.split()
+        # Exact label match (avoid ai.vtt2 matching ai.vtt2.stt)
+        parts = line.split()
+        if len(parts) >= 3 and parts[2] == label:
             pid = parts[0] if parts[0] != "-" else "not running"
-            exit_code = parts[1] if len(parts) > 1 else "?"
+            exit_code = parts[1]
             print(f"  PID: {pid}")
             print(f"  Last exit code: {exit_code}")
             break
     else:
-        print("  Status: not loaded (run: launchctl load ~/Library/LaunchAgents/ai.vtt2.plist)")
+        print(f"  Status: not loaded (launchctl load {installed})")
 
-    # Log files
+
+def service_status() -> int:
+    """Show STT + menubar status."""
+    print("VTTv2 service status:")
+    print()
+    _print_one_status(STT_LABEL, INSTALLED_STT_PLIST)
+    print()
+    _print_one_status(UI_LABEL, INSTALLED_UI_PLIST)
+    print()
     log_dir = Path.home() / "Library" / "Logs" / "vtt2"
     if log_dir.exists():
         log_files = sorted(log_dir.glob("*.log"))
         if log_files:
-            print(f"  Logs: {log_dir}")
+            print(f"Logs: {log_dir}")
             for lf in log_files:
                 size_kb = lf.stat().st_size / 1024
-                print(f"    {lf.name} ({size_kb:.0f} KB)")
+                print(f"  {lf.name} ({size_kb:.0f} KB)")
     return 0

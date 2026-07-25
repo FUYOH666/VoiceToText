@@ -42,6 +42,10 @@ class TranscriptionEngineWrapper:
             from .remote_asr import RemoteASRTranscriber
             self.engine = RemoteASRTranscriber(config)
             logger.info("Используется движок: Remote ASR (Tailscale)")
+        elif engine_type == "local_stt":
+            from .local_stt import LocalSTTTranscriber
+            self.engine = LocalSTTTranscriber(config)
+            logger.info("Используется движок: Local STT HTTP (loopback)")
         else:
             raise ValueError(f"Неизвестный движок: {engine_type}")
     

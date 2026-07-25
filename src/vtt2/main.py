@@ -303,7 +303,11 @@ class VTT2App(rumps.App):
             elapsed = time.time() - start_time
             self.logger.info(f"✅ Транскрипция завершена за {elapsed:.2f} секунд: {len(text)} символов")
 
-            if self.config.text_processing.strip_whisper_tail_artifacts:
+            # local_stt: артефакты уже сняты на STT-сервере — без двойной очистки
+            if (
+                self.config.transcription.engine != "local_stt"
+                and self.config.text_processing.strip_whisper_tail_artifacts
+            ):
                 from text.whisper_artifacts import strip_trailing_whisper_artifacts
 
                 langs = frozenset(self.config.text_processing.whisper_artifact_languages)
@@ -652,9 +656,14 @@ def main():
     parser.add_argument("--health", action="store_true", help="Run health check")
     parser.add_argument("--config", default="config.yaml", help="Path to config.yaml")
     parser.add_argument("--verbose", action="store_true", help="Enable DEBUG logging")
-    parser.add_argument("--install", action="store_true", help="Install as launchd service")
-    parser.add_argument("--uninstall", action="store_true", help="Uninstall launchd service")
+    parser.add_argument("--install", action="store_true", help="Install launchd services (STT + menubar)")
+    parser.add_argument("--uninstall", action="store_true", help="Uninstall launchd services")
     parser.add_argument("--status", action="store_true", help="Show service status")
+    parser.add_argument(
+        "--serve-stt",
+        action="store_true",
+        help="Run local OpenAI-compatible STT HTTP API (owns MLX model)",
+    )
 
     args = parser.parse_args()
 
@@ -670,6 +679,26 @@ def main():
 
     if args.health:
         return health_check_command(args.config)
+
+    # --- STT HTTP server (no menubar) ---
+    if args.serve_stt:
+        project_root = _resolve_project_root(args.config)
+        config_file = project_root / args.config
+        try:
+            config = Config.from_yaml(str(config_file), project_root)
+        except Exception as e:
+            print(f"Ошибка загрузки конфигурации: {e}")
+            sys.exit(1)
+        log_level = "DEBUG" if args.verbose else config.logging.level
+        setup_logging(
+            level=log_level,
+            format_string=config.logging.format,
+            log_file=config.logging.file,
+        )
+        from stt_server import run_server
+
+        run_server(config)
+        return 0
 
     # --- Normal app start ---
     project_root = _resolve_project_root(args.config)

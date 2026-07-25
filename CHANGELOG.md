@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0] - 2026-07-25
+
+### Added
+- **Local STT HTTP API** (`ai.vtt2.stt`): OpenAI-compatible `POST /v1/audio/transcriptions` on `127.0.0.1:8765`, plus `GET /healthz` and `GET /readyz` (503 until model warmup).
+- **Menubar thin client** (`transcription.engine: local_stt`): Option+Space records locally, transcribes via loopback — one resident `mlx_whisper` shared with agents.
+- LaunchAgent template [`service/ai.vtt2.stt.plist`](service/ai.vtt2.stt.plist); `--install` / `--uninstall` / `--status` manage STT + menubar.
+- CLI: `uv run python src/vtt2/main.py --serve-stt`
+- Agent note: [`docs/STT_API.md`](docs/STT_API.md)
+- Audio decode helper for uploads (soundfile + ffmpeg for ogg/webm/m4a)
+- Deps: `fastapi`, `uvicorn`, `httpx`, `python-multipart`
+
+### Changed
+- Default `config.yaml`: menubar `local_stt`, model owned by `stt_server.engine: mlx_whisper`
+- Whisper tail-artifact stripping applied on the STT server for all HTTP clients
+
 ## [1.2.9] - 2026-04-20
 
 ### Added

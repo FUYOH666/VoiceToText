@@ -14,12 +14,12 @@ Cloud transcription costs $10–20/month and sends your data elsewhere. Built-in
 
 VTT sits in your Mac menu bar. Press **Option+Space**, speak, text appears where your cursor is.
 
-Runs locally on Apple Silicon (offline) or on your own server via Tailscale. No subscription. 99 languages, auto-detected. Works in any app.
+By default the **Whisper model lives in one local STT process** (`ai.vtt2.stt` on `127.0.0.1:8765`). The menubar is a thin client — same API agents use (OpenClaw, curl, bots). Optional: remote GPU ASR via Tailscale. No subscription. 99 languages, auto-detected. Works in any app.
 
 ## Results
 
-- **Before:** 5 min typing a 2-min voice note, or $20/mo for cloud ASR, or 3.5 GB RAM for local models
-- **After:** 2 min voice → instant text. Local mode: ~42x real-time. Remote mode: ~120 MB RAM on Mac (model on your server)
+- **Before:** 5 min typing a 2-min voice note, or $20/mo for cloud ASR, or two copies of a local model in RAM
+- **After:** 2 min voice → instant text. One resident MLX model (~3.5 GB) shared by hotkey + HTTP clients; or remote ASR (~120 MB on Mac)
 
 ---
 
@@ -44,11 +44,16 @@ cd VoiceToText
 uv sync
 ```
 
-With **local** `mlx_whisper`, the model downloads on first use (~6 GB for large-v3); after that, transcription works offline. With **`remote_asr`** (default in this repo’s `config.yaml`), the Mac does not load MLX; transcription needs your ASR server reachable (e.g. via Tailscale).
+Default config: menubar uses `local_stt` → `http://127.0.0.1:8765`; the STT service loads `mlx_whisper` (model downloads on first warmup, ~6 GB for large-v3, then offline). Agent API: [docs/STT_API.md](docs/STT_API.md).
 
 ### Run
 
 ```bash
+# Terminal A — STT (owns the model)
+uv run python src/vtt2/main.py --serve-stt
+
+# Terminal B — menubar / hotkeys (after readyz is green)
+curl -fsS http://127.0.0.1:8765/readyz
 uv run python src/vtt2/main.py
 ```
 
@@ -56,17 +61,23 @@ A microphone icon appears in your menu bar. Press **Option+Space** to record.
 
 ### Run as a background service
 
-To start automatically on login and restart on crash:
+Installs **two** LaunchAgents: `ai.vtt2.stt` (model + HTTP) and `ai.vtt2` (menubar). Both start on login.
 
 ```bash
-# Install
+# Install both
 uv run python src/vtt2/main.py --install
 
 # Check status
 uv run python src/vtt2/main.py --status
 
-# Remove
+# Remove both
 uv run python src/vtt2/main.py --uninstall
+```
+
+```bash
+# Smoke test STT API
+curl -fsS http://127.0.0.1:8765/readyz
+curl -fsS -F file=@sample.wav http://127.0.0.1:8765/v1/audio/transcriptions
 ```
 
 ### macOS permissions
@@ -103,27 +114,29 @@ Or I can deploy, customize, and integrate it for your team in **2 weeks** — cu
 1. Press **Option+Space** to start recording
 2. Speak (any language — auto-detected)
 3. Press **Option+Space** again to stop
-4. Text is transcribed and pasted into the active app
+4. Menubar POSTs audio to local STT → text is pasted into the active app
 
-**Local mode:** [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) on Apple Silicon — ~42x faster than real-time on M4 Max.  
-**Remote mode:** Whisper on your Linux GPU server via Tailscale.
+Agents use the same `POST /v1/audio/transcriptions` — see [docs/STT_API.md](docs/STT_API.md).
+
+**Local STT (default):** [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) in `ai.vtt2.stt` — one resident model.  
+**Remote mode:** set `transcription.engine: remote_asr` — Whisper on your Linux GPU via Tailscale.
 
 ### Transcription engines
 
-| Mode | RAM on Mac | Where it runs |
-|------|------------|---------------|
-| `mlx_whisper` (local) | ~3.5 GB | Your Mac (Apple Silicon) |
-| `remote_asr` | **~120 MB** | Linux GPU server via Tailscale |
-
-With `remote_asr`, the model runs on your server — Mac stays light. Lazy imports ensure MLX is never loaded when using remote.
+| Mode | Role | RAM on Mac |
+|------|------|------------|
+| `local_stt` (default menubar) | HTTP client → `127.0.0.1:8765` | ~120 MB (UI only) |
+| STT service `stt_server.engine: mlx_whisper` | Owns the model | ~3.5 GB |
+| `mlx_whisper` in menubar | In-process MLX (avoid if STT also running) | ~3.5 GB extra |
+| `remote_asr` | Linux GPU via Tailscale | ~120 MB |
 
 **Models (defaults in `config.yaml`):**
 
 | Engine | Model / artifact |
 |--------|------------------|
-| `remote_asr` | `cstr/whisper-large-v3-turbo-int8_float32` (server-side; override via `transcription.remote_asr.model`) |
-| `mlx_whisper` | `mlx-community/whisper-large-v3-mlx` |
-| `whisper_cpp` | GGML file path, e.g. `models/ggml-medium-q5_0.bin` (`transcription.whisper_cpp.model_path`) |
+| `mlx_whisper` (STT server) | `mlx-community/whisper-large-v3-mlx` |
+| `remote_asr` | `cstr/whisper-large-v3-turbo-int8_float32` |
+| `whisper_cpp` | GGML path, e.g. `models/ggml-medium-q5_0.bin` |
 
 Tail-end subtitle-style hallucinations are stripped before paste; see [docs/WHISPER_ARTIFACTS.md](docs/WHISPER_ARTIFACTS.md).
 
@@ -187,8 +200,15 @@ Default is `whisper-large-v3-mlx` (best quality). If you have 8 GB RAM, use `whi
 All settings are in `config.yaml`. Shape (simplified):
 
 ```yaml
+stt_server:
+  host: "127.0.0.1"
+  port: 8765
+  engine: mlx_whisper          # model owner (LaunchAgent ai.vtt2.stt)
+
 transcription:
-  engine: remote_asr  # or mlx_whisper | whisper_cpp
+  engine: local_stt            # menubar → HTTP client
+  local_stt:
+    base_url: "http://127.0.0.1:8765"
   mlx_whisper:
     model_name: "mlx-community/whisper-large-v3-mlx"
     language: "auto"  # or "en", "ru", "zh", "ja", …
@@ -205,30 +225,38 @@ text_processing:
   whisper_artifact_languages: [ru, en]
 ```
 
-You can also override settings with environment variables using the `VTT2_` prefix (see `.env.example`).
+You can also override settings with environment variables using the `VTT2_` prefix (see `.env.example`). Agent-facing API details: [docs/STT_API.md](docs/STT_API.md).
 
 ### Troubleshooting
 
 **Hotkey not working:**
 Add your terminal app to System Settings > Privacy & Security > Accessibility and Input Monitoring. Restart the app.
 
-**Hotkey stopped responding after recording (stuck):** Restart the service: `launchctl unload ~/Library/LaunchAgents/ai.vtt2.plist && launchctl load ~/Library/LaunchAgents/ai.vtt2.plist`. If a zombie process remains, kill it in Activity Monitor (`python … main.py`) or `pkill -9 -f vtt2/main.py`, remove `~/.local/state/vtt2/vtt2.pid`, then load again. (v1.2.1+: safer stream stop; v1.2.6+: non-blocking drain of the audio chunk queue after stop — update if you still see hangs.)
+**STT not ready / menubar fails to transcribe:** Wait for `curl -fsS http://127.0.0.1:8765/readyz`. Check `~/Library/Logs/vtt2/stt.stderr.log`. Reload: `launchctl unload ~/Library/LaunchAgents/ai.vtt2.stt.plist && launchctl load ~/Library/LaunchAgents/ai.vtt2.stt.plist`.
+
+**Hotkey stopped responding after recording (stuck):** Restart the UI service: `launchctl unload ~/Library/LaunchAgents/ai.vtt2.plist && launchctl load ~/Library/LaunchAgents/ai.vtt2.plist`. If a zombie remains, `pkill -9 -f 'src/vtt2/main.py'` (careful: also stops STT if matching), remove `~/.local/state/vtt2/vtt2.pid`, then `--install` or load plists again.
 
 **"Model not found" on first run:**
-The model downloads from Hugging Face on first use. Make sure you have internet for the initial download. After that, everything works offline.
+The model downloads from Hugging Face on first STT warmup. Need internet once; then offline.
 
 **High memory usage:**
-- **Best option:** switch to `remote_asr` in `config.yaml` — drops from ~3.5 GB to ~120 MB (model runs on server).
-- Or use a smaller local model (see table above). Memory auto-cleanup is enabled by default.
+- Default: one MLX resident in `ai.vtt2.stt` (~3.5 GB); menubar stays light.
+- Do not set menubar `engine: mlx_whisper` while STT is also running (second copy).
+- Or use `remote_asr` / a smaller `mlx_whisper` model.
 
 **Check everything at once:**
 ```bash
 uv run python src/vtt2/main.py --health
+uv run python src/vtt2/main.py --status
+curl -fsS http://127.0.0.1:8765/readyz
 ```
 
 ### Logs
 
-Logs are at `~/Library/Logs/vtt2/` (`vtt2.stdout.log`, `vtt2.stderr.log`, `vtt2.log`).
+Logs are at `~/Library/Logs/vtt2/`:
+
+- Menubar: `vtt2.stdout.log`, `vtt2.stderr.log`, `vtt2.log`
+- STT API: `stt.stdout.log`, `stt.stderr.log`
 
 For verbose output: `uv run python src/vtt2/main.py --verbose`
 

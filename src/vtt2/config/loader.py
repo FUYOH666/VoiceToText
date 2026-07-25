@@ -46,6 +46,35 @@ class RemoteASRConfig(BaseModel):
     timeout_seconds: int = Field(60, ge=5, le=300, description="Таймаут запроса (секунды)")
 
 
+class LocalSTTConfig(BaseModel):
+    """Клиент к локальному STT HTTP API (menubar → loopback)"""
+    base_url: str = Field(
+        "http://127.0.0.1:8765",
+        description="Базовый URL локального STT (только loopback)",
+    )
+    path: str = Field(
+        "/v1/audio/transcriptions",
+        description="Путь к эндпоинту транскрипции",
+    )
+    timeout_seconds: int = Field(
+        600, ge=5, le=3600, description="Таймаут запроса (секунды)"
+    )
+
+
+class STTServerConfig(BaseModel):
+    """Локальный OpenAI-compatible STT HTTP сервер (владелец модели)"""
+    host: str = Field("127.0.0.1", description="Bind host (только loopback)")
+    port: int = Field(8765, ge=1, le=65535, description="Порт STT API")
+    max_upload_mb: int = Field(25, ge=1, le=200, description="Лимит размера файла (MB)")
+    request_timeout_seconds: int = Field(
+        600, ge=30, le=3600, description="Таймаут обработки одного запроса"
+    )
+    engine: Literal["mlx_whisper", "whisper_cpp"] = Field(
+        "mlx_whisper",
+        description="Движок, который грузит STT-сервер (не local_stt/remote_asr)",
+    )
+
+
 class WhisperCppConfig(BaseModel):
     """Конфигурация whisper.cpp"""
     binary_path: str = Field(..., description="Путь к бинарнику whisper")
@@ -64,12 +93,13 @@ class WhisperCppConfig(BaseModel):
 
 class TranscriptionConfig(BaseModel):
     """Конфигурация транскрипции"""
-    engine: Literal["whisper_cpp", "mlx_whisper", "remote_asr"] = Field(
-        "mlx_whisper", description="Движок транскрипции"
+    engine: Literal["whisper_cpp", "mlx_whisper", "remote_asr", "local_stt"] = Field(
+        "local_stt", description="Движок транскрипции (menubar: local_stt → HTTP)"
     )
     whisper_cpp: Optional[WhisperCppConfig] = Field(None, description="Настройки whisper.cpp")
     mlx_whisper: Optional[MLXWhisperConfig] = Field(None, description="Настройки MLX Whisper")
     remote_asr: Optional[RemoteASRConfig] = Field(None, description="Настройки удалённого ASR")
+    local_stt: Optional[LocalSTTConfig] = Field(None, description="Клиент локального STT HTTP")
 
     @model_validator(mode='after')
     def validate_engine_config(self):
@@ -80,6 +110,11 @@ class TranscriptionConfig(BaseModel):
             self.mlx_whisper = MLXWhisperConfig()
         if self.engine == "remote_asr" and not self.remote_asr:
             self.remote_asr = RemoteASRConfig()
+        if self.engine == "local_stt" and not self.local_stt:
+            self.local_stt = LocalSTTConfig()
+        # MLX конфиг нужен STT-серверу даже когда menubar на local_stt
+        if self.mlx_whisper is None:
+            self.mlx_whisper = MLXWhisperConfig()
         return self
 
 
@@ -152,10 +187,16 @@ class Config(BaseModel):
     text_processing: TextProcessingConfig
     performance: PerformanceConfig
     logging: LoggingConfig
-    
+    stt_server: STTServerConfig = Field(default_factory=STTServerConfig)
+
     @model_validator(mode='after')
     def validate_paths(self) -> 'Config':
-        """Проверка путей к файлам"""
+        """Проверка путей к файлам и bind STT"""
+        if self.stt_server.host not in ("127.0.0.1", "localhost", "::1"):
+            raise ValueError(
+                "stt_server.host должен быть loopback (127.0.0.1 / localhost / ::1); "
+                f"получено: {self.stt_server.host}"
+            )
         # Проверка бинарника whisper.cpp (только если используется whisper_cpp)
         if self.transcription.whisper_cpp:
             binary_path = Path(self.transcription.whisper_cpp.binary_path)
