@@ -23,8 +23,8 @@ audio:
   channels: 1
   # Формат аудио (S16_LE для arecord)
   format: "S16_LE"
-  # ALSA устройство захвата. null = системный default (для Bluetooth см. docs/BLUETOOTH_MIC.md).
-  # Встроенный микрофон: plughw:CARD=Generic_1,DEV=0
+  # ALSA устройство: null = default (PipeWire) — следует системному источнику (Settings / wpctl).
+  # Сейчас default часто Bluetooth (Major V). Встроенный: plughw:CARD=Generic_1,DEV=0
   device: null
   # Временная директория для записи
   temp_dir: "/tmp/f9-asr-recordings"

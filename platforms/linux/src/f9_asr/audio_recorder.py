@@ -52,7 +52,9 @@ class AudioRecorder:
         device = getattr(self.config, "device", None)
         if device:
             cmd.extend(["-D", device])
-            logger.debug(f"Using ALSA device: {device}")
+            logger.info(f"Using ALSA device: {device}")
+        else:
+            logger.info("Using ALSA default device (PipeWire / system default source)")
         cmd.extend(["-c", str(self.config.channels), str(self.temp_file)])
 
         try:
