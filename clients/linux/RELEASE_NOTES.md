@@ -1,5 +1,10 @@
 # Release Notes
 
+## v0.1.4 (2026-07-25)
+
+- DBUS в launch script для уведомлений из user systemd
+- TROUBLESHOOTING: PipeWire default vs встроенный mic, VAD/пустой текст
+
 ## v0.1.3 (2026-04-06)
 
 - Исправление systemd: `f9-asr-launch.sh` для DISPLAY `:1` (GDM) и XAUTHORITY

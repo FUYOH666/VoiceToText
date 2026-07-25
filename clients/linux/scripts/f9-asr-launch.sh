@@ -2,6 +2,9 @@
 # Подбор DISPLAY и XAUTHORITY для pynput (GNOME/GDM, :0 или :1)
 set -euo pipefail
 UID_NUM="$(id -u)"
+if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && [[ -S "/run/user/${UID_NUM}/bus" ]]; then
+  export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${UID_NUM}/bus"
+fi
 export XAUTHORITY="${XAUTHORITY:-/run/user/${UID_NUM}/gdm/Xauthority}"
 if [[ ! -f "$XAUTHORITY" ]]; then
   export XAUTHORITY="${HOME}/.Xauthority"

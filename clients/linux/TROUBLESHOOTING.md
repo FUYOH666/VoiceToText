@@ -11,17 +11,21 @@
 
 #### 1. Тихий звук или отсутствие звука
 
-**Проверка:**
+**Проверка (тишина при `device: null` / PipeWire):**
 ```bash
-# Проверить уровень микрофона
-alsamixer
-# Нажмите F4 для выбора Capture, увеличьте уровень
+# 5 секунд — говорите в микрофон; peak должен быть >> 0
+arecord -d 5 -f S16_LE -r 16000 -c 1 /tmp/mic-test.wav
+python3 -c "import struct,wave,math; w=wave.open('/tmp/mic-test.wav'); f=w.readframes(w.getnframes()); s=struct.unpack('<%dh'% (len(f)//2), f); print('peak', max(abs(x) for x in s))"
+
+# Логи ASR: если вся дорожка отфильтрована VAD — в WAV нет речи
+journalctl -u asr-qwen3 -n 20 --no-pager | rg 'VAD filter removed'
+# Плохо: "VAD filter removed 00:04.734 of audio" при длительности 00:04.734
 ```
 
 **Решение:**
-- Говорите громче и ближе к микрофону
-- Проверьте настройки микрофона в системе
-- Убедитесь, что микрофон не отключен
+- Проверьте **источник ввода** в GNOME Settings → Sound или `wpctl status` (звёздочка у Sources). F9 с `device: null` пишет с **системного default**, не «с гарнитуры по умолчанию в голове».
+- Если говорите во **встроенный** микрофон — в `config.yaml`: `device: "plughw:CARD=Generic_1,DEV=0"`. Если в **Bluetooth** — оставьте `device: null` и профиль HFP ([docs/BLUETOOTH_MIC.md](docs/BLUETOOTH_MIC.md)).
+- После смены `config.yaml`: `systemctl --user restart f9-asr.service`
 
 #### 2. Неправильный формат аудио
 
