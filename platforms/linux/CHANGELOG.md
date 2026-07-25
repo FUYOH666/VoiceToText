@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] - 2026-07-25
+
+### Fixed
+
+- **notify-send из systemd:** в `f9-asr-launch.sh` задаётся `DBUS_SESSION_BUS_ADDRESS` — снова видны уведомления «Recording started» / предупреждения.
+- **Пустая транскрипция:** уточнён выбор микрофона (`device: null` = PipeWire default; встроенный vs Bluetooth) в `config.yaml` и TROUBLESHOOTING (VAD, `wpctl`).
+
+### Changed
+
+- `audio_recorder`: в лог пишется явное ALSA-устройство или default PipeWire.
+
 ## [0.1.3] - 2026-04-06
 
 ### Fixed

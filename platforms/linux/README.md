@@ -4,7 +4,14 @@
 
 ## Репозиторий VoiceToText
 
-Этот код лежит в монорепозитории [VoiceToText](https://github.com/FUYOH666/VoiceToText) в каталоге **`platforms/linux`**. После клонирования переходите в него (`cd VoiceToText/platforms/linux`). Отдельная ветка под Linux не требуется: одна ветка `main`, разные платформы — разные папки.
+Этот код лежит в монорепозитории [VoiceToText](https://github.com/FUYOH666/VoiceToText):
+
+| Ветка | Путь | Назначение |
+|--------|------|------------|
+| **`product-unified`** (default) | `clients/linux` | Активная разработка Mac + Linux, общий ASR-клиент |
+| **`main`** (legacy) | `platforms/linux` | Standalone-копия Linux-клиента |
+
+Локальная разработка: этот каталог (`settings-linux/F9-asr`). Публикация: `./update-github.sh` (обе ветки). См. [LEGACY_BRANCHES.md](https://github.com/FUYOH666/VoiceToText/blob/product-unified/LEGACY_BRANCHES.md).
 
 ## Особенности
 
