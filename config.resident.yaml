@@ -10,7 +10,7 @@
 # Active daily default is config.yaml (idle_unload). See docs/STT_API.md.
 
 app:
-  version: "1.5.0"
+  version: "1.5.1"
   name: "VTTv2"
 
 stt_server:

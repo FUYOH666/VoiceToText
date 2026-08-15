@@ -2,12 +2,36 @@
 import VoiceToTextCore
 #endif
 import AppKit
+import ApplicationServices
 import CoreGraphics
 import Foundation
 
-/// Save frontmost app → clipboard → Cmd+V. Failures are logged, not alerted.
+/// Save frontmost app → clipboard → Cmd+V.
+/// Same event order as the working Python injector (annotated/session tap + Cmd down/up).
 enum Paster {
     private static var savedBundleID: String?
+
+    /// Log only. Prompting on every paste fights a stale TCC row after ad-hoc rebuilds.
+    static func logPermissions() {
+        let accessibility = AXIsProcessTrusted()
+        let monitoring = CGPreflightListenEventAccess()
+        AppLog.info("permissions Accessibility=\(accessibility) InputMonitoring=\(monitoring)")
+        if !accessibility || !monitoring {
+            AppLog.warning(
+                "VoiceToText is not trusted yet. Remove the old row in Privacy, add this .app, enable Accessibility and Input Monitoring."
+            )
+        }
+    }
+
+    /// Explicit menu action only — shows the system sheet once.
+    static func promptPermissions() {
+        let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(prompt)
+        if !CGPreflightListenEventAccess() {
+            _ = CGRequestListenEventAccess()
+        }
+        logPermissions()
+    }
 
     static func saveFrontmost() {
         savedBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
@@ -26,8 +50,12 @@ enum Paster {
             return false
         }
 
+        logPermissions()
         restoreFrontmost()
-        Thread.sleep(forTimeInterval: 0.15)
+        Thread.sleep(forTimeInterval: 0.3)
+
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
+        AppLog.info("frontmost before Cmd+V: \(front)")
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -35,15 +63,16 @@ enum Paster {
             AppLog.error("NSPasteboard setString failed")
             return false
         }
+        Thread.sleep(forTimeInterval: 0.2)
 
-        Thread.sleep(forTimeInterval: 0.1)
-        let ok = postCommandV()
-        if ok {
-            AppLog.info("pasted \(trimmed.count) characters via Cmd+V")
+        let tap = preferredTap()
+        let posted = postCommandV(tap: tap)
+        if posted {
+            AppLog.info("Cmd+V posted via \(tapName(tap)) (\(trimmed.count) chars); text also on clipboard")
         } else {
-            AppLog.error("CGEvent Cmd+V failed; text left on clipboard")
+            AppLog.error("Cmd+V post failed; text left on clipboard. Enable Accessibility + Input Monitoring for VoiceToText")
         }
-        return ok
+        return posted
     }
 
     private static func restoreFrontmost() {
@@ -55,22 +84,56 @@ enum Paster {
             AppLog.warning("saved app \(savedBundleID) is not running; paste into current frontmost")
             return
         }
-        match.activate()
+        if #available(macOS 14.0, *) {
+            match.activate()
+        } else {
+            match.activate(options: [.activateIgnoringOtherApps])
+        }
+        Thread.sleep(forTimeInterval: 0.2)
     }
 
-    private static func postCommandV() -> Bool {
+    private static func preferredTap() -> CGEventTapLocation {
+        // Python: AnnotatedSession first (Sequoia+), then session. hidEventTap is often dropped.
+        if AXIsProcessTrusted() || CGPreflightListenEventAccess() {
+            return .cgAnnotatedSessionEventTap
+        }
+        return .cgSessionEventTap
+    }
+
+    private static func tapName(_ tap: CGEventTapLocation) -> String {
+        switch tap {
+        case .cghidEventTap: return "hid"
+        case .cgSessionEventTap: return "session"
+        case .cgAnnotatedSessionEventTap: return "annotated"
+        @unknown default: return "unknown"
+        }
+    }
+
+    private static func postCommandV(tap: CGEventTapLocation) -> Bool {
         let source = CGEventSource(stateID: .hidSystemState)
+        let cmd: CGKeyCode = 0x37
         let keyV: CGKeyCode = 0x09
         guard
-            let down = CGEvent(keyboardEventSource: source, virtualKey: keyV, keyDown: true),
-            let up = CGEvent(keyboardEventSource: source, virtualKey: keyV, keyDown: false)
+            let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: cmd, keyDown: true),
+            let vDown = CGEvent(keyboardEventSource: source, virtualKey: keyV, keyDown: true),
+            let vUp = CGEvent(keyboardEventSource: source, virtualKey: keyV, keyDown: false),
+            let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: cmd, keyDown: false)
         else {
             return false
         }
-        down.flags = .maskCommand
-        up.flags = .maskCommand
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        cmdDown.flags = .maskCommand
+        vDown.flags = .maskCommand
+        vUp.flags = .maskCommand
+        cmdUp.flags = []
+
+        cmdDown.post(tap: tap)
+        Thread.sleep(forTimeInterval: 0.05)
+        vDown.post(tap: tap)
+        Thread.sleep(forTimeInterval: 0.15)
+        vUp.post(tap: tap)
+        Thread.sleep(forTimeInterval: 0.05)
+        cmdUp.post(tap: tap)
+        Thread.sleep(forTimeInterval: 0.2)
         return true
     }
 }

@@ -7,7 +7,8 @@ import SwiftUI
 
 @MainActor
 final class AppState: ObservableObject {
-    @Published var icon: String = "🎤"
+    /// App mark in the menu bar. Not `mic` — macOS already shows the orange privacy pill while recording.
+    @Published var menuSymbol: String = "waveform"
     @Published var status: String = "Готов"
     @Published var lastText: String = ""
 
@@ -27,6 +28,7 @@ final class AppState: ObservableObject {
         hotkey.start()
         NSApplication.shared.setActivationPolicy(.accessory)
         AppLog.info("VoiceToText UI started; STT \(config.baseURL.absoluteString)")
+        Paster.logPermissions()
         Task { await self.warmupPermission() }
     }
 
@@ -48,6 +50,10 @@ final class AppState: ObservableObject {
                 presentAlert(title: "Health Check", message: "local_stt: \(error.localizedDescription)")
             }
         }
+    }
+
+    func requestPermissions() {
+        Paster.promptPermissions()
     }
 
     func showAbout() {
@@ -84,12 +90,12 @@ final class AppState: ObservableObject {
         do {
             try recorder.start()
             isRecording = true
-            icon = "🔴"
+            menuSymbol = "waveform"
             status = "ЗАПИСЬ"
             AppLog.info("recording")
         } catch {
             isRecording = false
-            icon = "🎤"
+            menuSymbol = "waveform"
             status = "Ошибка"
             AppLog.error("start recording: \(error.localizedDescription)")
         }
@@ -98,7 +104,7 @@ final class AppState: ObservableObject {
     private func stopAndTranscribe() {
         isRecording = false
         isProcessing = true
-        icon = "🎤"
+        menuSymbol = "hourglass"
         status = "Обработка..."
         let wav: Data
         do {
@@ -126,7 +132,7 @@ final class AppState: ObservableObject {
                 AppLog.error("transcribe: \(error.localizedDescription)")
             }
             isProcessing = false
-            icon = "🎤"
+            menuSymbol = "waveform"
         }
     }
 

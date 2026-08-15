@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1] - 2026-08-15
+
+### Changed
+- Menu bar mark is a waveform (not a second system microphone). Recording state stays in the menu; macOS already shows the orange privacy pill.
+- Paste uses the same Cmd down/up + annotated/session tap path as the working Python injector.
+- Accessibility / Input Monitoring: log only on dictate; system prompt only from the menu item «Разрешения…» (ad-hoc rebuilds otherwise fight a stale TCC row).
+
 ## [1.5.0] - 2026-08-15
 
 ### Added

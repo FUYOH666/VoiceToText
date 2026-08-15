@@ -86,13 +86,14 @@ def find_voicetotext_app(extra_roots: list[Path] | None = None) -> Path | None:
     candidates: list[Path] = []
     if extra_roots:
         candidates.extend(Path(root) / "VoiceToText.app" for root in extra_roots)
-    candidates.extend(
-        [
-            _project_root() / "macos" / "dist" / "VoiceToText.app",
-            _project_root() / "dist" / "VoiceToText.app",
-            Path("/Applications/VoiceToText.app"),
-        ]
-    )
+    else:
+        candidates.extend(
+            [
+                _project_root() / "macos" / "dist" / "VoiceToText.app",
+                _project_root() / "dist" / "VoiceToText.app",
+                Path("/Applications/VoiceToText.app"),
+            ]
+        )
     for path in candidates:
         binary = path / "Contents" / "MacOS" / "VoiceToText"
         if binary.is_file():

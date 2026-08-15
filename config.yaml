@@ -5,7 +5,7 @@
 # Always-on snapshot: config.resident.yaml
 
 app:
-  version: "1.5.0"
+  version: "1.5.1"
   name: "VTTv2"
 
 # Локальный STT HTTP (владелец mlx_whisper). Menubar и агенты — клиенты.

@@ -27,13 +27,17 @@ swiftc -parse-as-library \
   -framework AppKit \
   -framework AVFoundation \
   -framework Carbon \
-  -framework CoreGraphics
+  -framework CoreGraphics \
+  -framework ApplicationServices
 
 rm -rf "$DIST"
 mkdir -p "$DIST/Contents/MacOS" "$DIST/Contents/Resources"
 cp "$BIN" "$DIST/Contents/MacOS/$BIN_NAME"
 cp "$PKG/Resources/Info.plist" "$DIST/Contents/Info.plist"
 cp "$PKG/Resources/VoiceToText.entitlements" "$DIST/Contents/Resources/VoiceToText.entitlements"
+if [[ -f "$PKG/Resources/icon.png" ]]; then
+  cp "$PKG/Resources/icon.png" "$DIST/Contents/Resources/icon.png"
+fi
 
 # Ad-hoc sign for local daily driver (no hardened runtime — that is release.sh).
 if command -v codesign >/dev/null; then

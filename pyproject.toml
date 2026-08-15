@@ -1,7 +1,7 @@
 [project]
 name = "vtt-mlx-m4"
-version = "1.5.0"
-description = "Voice-to-Text для macOS с MLX Whisper, оптимизировано для M4 Max и длинных записей"
+version = "1.5.1"
+description = "Private local STT for Apple Silicon. Option+Space. No cloud, no subscription."
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
