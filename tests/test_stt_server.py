@@ -359,7 +359,7 @@ class TestSTTServerConfig:
 
     def test_default_config_yaml_loads(self, project_root):
         cfg = Config.from_yaml(str(project_root / "config.yaml"), project_root)
-        assert cfg.app.version == "1.4.0"
+        assert cfg.app.version == "1.5.0"
         assert cfg.transcription.engine == "local_stt"
         assert cfg.stt_server.port == 8765
         assert cfg.stt_server.host == "127.0.0.1"

@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.0] - 2026-08-15
+
+### Added
+- Native Swift menubar app (`macos/VoiceToText`): Option+Space, local STT client, paste — no Python in Dock.
+- `--install` prefers `VoiceToText.app` as login item; rumps LaunchAgent remains the fallback.
+- `macos/scripts/build.sh` (local ad-hoc `.app`) and `macos/scripts/release.sh` (Developer ID + notarytool + staple). Signing secrets stay in gitignored `macos/Signing.xcconfig`.
+
+### Changed
+- Canonical contact email: `private@scanovich.ai`.
+
 ## [1.4.0] - 2026-08-15
 
 ### Added

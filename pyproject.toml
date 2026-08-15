@@ -1,12 +1,12 @@
 [project]
 name = "vtt-mlx-m4"
-version = "1.4.0"
+version = "1.5.0"
 description = "Voice-to-Text для macOS с MLX Whisper, оптимизировано для M4 Max и длинных записей"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [
-    {name = "Aleksandr Mordvinov", email = "contact@scanovich.ai"}
+    {name = "Aleksandr Mordvinov", email = "private@scanovich.ai"}
 ]
 keywords = ["voice-to-text", "speech-recognition", "whisper", "mlx", "transcription", "offline", "apple-silicon"]
 classifiers = [

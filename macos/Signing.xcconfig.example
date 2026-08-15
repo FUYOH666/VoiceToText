@@ -1,0 +1,9 @@
+// Copy to macos/Signing.xcconfig (gitignored) or export the same keys.
+// Do not put a real Team ID in git.
+
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_IDENTITY = Developer ID Application: Your Name (TEAMID)
+
+// notarytool keychain profile created once:
+//   xcrun notarytool store-credentials VTT2_NOTARY --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID --password APP_SPECIFIC_PASSWORD
+NOTARY_PROFILE = VTT2_NOTARY

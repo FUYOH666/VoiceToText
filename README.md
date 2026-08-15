@@ -5,7 +5,7 @@
 - **Hotkey:** Option+Space in the menu bar — speak, text lands at the cursor
 - **Private:** speech stays on `127.0.0.1:8765` (OpenAI-compatible `POST /v1/audio/transcriptions`)
 - **Two memory profiles:** default `config.yaml` loads Whisper on demand and unloads after 15 min idle; always-on: `config.resident.yaml`
-- **Install:** `uv sync` then `uv run python src/vtt2/main.py --install` (two LaunchAgents, start on login)
+- **Install:** `uv sync`, `macos/scripts/build.sh`, then `uv run python src/vtt2/main.py --install` (STT LaunchAgent + Swift menu bar; rumps if `.app` is missing)
 
 ```bash
 curl -fsS http://127.0.0.1:8765/healthz
@@ -54,10 +54,13 @@ A microphone icon appears in your menu bar. Press **Option+Space** to record.
 
 ### Run as a background service
 
-Installs **two** LaunchAgents: `ai.vtt2.stt` (model + HTTP) and `ai.vtt2` (menubar). Both start on login.
+Installs **STT** (`ai.vtt2.stt`) and the menu bar (`ai.vtt2`). If `macos/dist/VoiceToText.app` exists, UI is the native Swift app (no Python in Dock). Otherwise rumps is the fallback.
 
 ```bash
-# Install both
+# Native menu bar (optional; Command Line Tools / Swift 6)
+macos/scripts/build.sh
+
+# Install STT + UI (Swift .app if built, else rumps)
 uv run python src/vtt2/main.py --install
 
 # Check status
@@ -83,7 +86,9 @@ On first launch macOS will ask for three permissions. **All three are required:*
 | Accessibility | Global hotkey (Option+Space) | Privacy & Security > Accessibility |
 | Input Monitoring | Auto-paste text (Cmd+V) | Privacy & Security > Input Monitoring |
 
-If hotkeys don't work, add your terminal app (Terminal, iTerm, Cursor) to **Accessibility** and **Input Monitoring**, then restart the app.
+If you built `VoiceToText.app`, grant **Microphone / Accessibility / Input Monitoring** to **VoiceToText**, not to Terminal or python.
+
+If the rumps fallback is running, add your terminal app (Terminal, iTerm, Cursor) to **Accessibility** and **Input Monitoring**, then restart.
 
 ---
 
@@ -95,7 +100,7 @@ Or I can deploy, customize, and integrate it for your team in **2 weeks** — cu
 
 **Free consultation** — tell me your use case, I'll tell you if it fits and how fast we can move.
 
-→ **Email:** iamfuyoh@gmail.com  
+→ **Email:** private@scanovich.ai  
 → **Telegram:** [@ScanovichAI](https://t.me/ScanovichAI)
 
 ---
@@ -265,6 +270,13 @@ Whisper supports 99 languages. Default is `language: "ru"`. Use `"auto"` only if
 ```bash
 # Run tests
 uv run pytest
+macos/scripts/test.sh
+
+# Signed / notarized .app (Apple Developer Program)
+# cp macos/Signing.xcconfig.example macos/Signing.xcconfig  # Team ID, not in git
+# xcrun notarytool store-credentials VTT2_NOTARY --apple-id ... --team-id ...
+macos/scripts/release.sh
+# → macos/dist/VoiceToText.app.zip (Gatekeeper). This machine needs a Developer ID identity.
 
 # Benchmark transcription speed
 uv run python test_transcription_speed.py

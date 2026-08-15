@@ -67,6 +67,11 @@ test_outputs/
 # Local config overrides (if any)
 config.local.yaml
 
+# Swift menubar
+macos/VoiceToText/.build/
+macos/dist/
+macos/Signing.xcconfig
+
 # Service env (Tailscale IP etc.) — не коммитить
 .env.vtt2
 

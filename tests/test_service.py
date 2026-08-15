@@ -1,5 +1,12 @@
 """Tests for launchd install helpers (orphan menubar, not STT)."""
-from service import is_orphan_menubar_cmdline, kill_orphan_menubar
+from pathlib import Path
+
+from service import (
+    find_voicetotext_app,
+    is_orphan_menubar_cmdline,
+    kill_orphan_menubar,
+    _render_swift_ui_plist,
+)
 
 
 def test_orphan_menubar_matches_main_py():
@@ -32,6 +39,12 @@ def test_orphan_menubar_skips_empty_and_unrelated():
     assert not is_orphan_menubar_cmdline(["/usr/bin/python", "other.py"])
 
 
+def test_orphan_menubar_matches_swift_binary():
+    assert is_orphan_menubar_cmdline(
+        ["/Applications/VoiceToText.app/Contents/MacOS/VoiceToText"]
+    )
+
+
 def test_kill_orphan_menubar_skips_current_and_stt(monkeypatch):
     class FakeProc:
         def __init__(self, pid, cmdline):
@@ -60,3 +73,20 @@ def test_kill_orphan_menubar_skips_current_and_stt(monkeypatch):
     assert ui.terminated
     assert not stt.terminated
     assert not self_ui.terminated
+
+
+def test_find_voicetotext_app_requires_binary(tmp_path):
+    fake = tmp_path / "VoiceToText.app" / "Contents" / "MacOS"
+    fake.mkdir(parents=True)
+    assert find_voicetotext_app(extra_roots=[tmp_path]) is None
+    (fake / "VoiceToText").write_text("", encoding="utf-8")
+    found = find_voicetotext_app(extra_roots=[tmp_path])
+    assert found == tmp_path / "VoiceToText.app"
+
+
+def test_render_swift_ui_plist_uses_app_binary(tmp_path):
+    app = tmp_path / "VoiceToText.app"
+    text = _render_swift_ui_plist(app)
+    assert str(app / "Contents" / "MacOS" / "VoiceToText") in text
+    assert "__APP_BINARY__" not in text
+    assert "ai.vtt2" in text

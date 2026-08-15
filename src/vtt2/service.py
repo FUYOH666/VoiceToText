@@ -81,6 +81,57 @@ def _env_vars_xml(env: dict[str, str]) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+def find_voicetotext_app(extra_roots: list[Path] | None = None) -> Path | None:
+    """Return VoiceToText.app if a built binary exists. Never uses a hardcoded home path."""
+    candidates: list[Path] = []
+    if extra_roots:
+        candidates.extend(Path(root) / "VoiceToText.app" for root in extra_roots)
+    candidates.extend(
+        [
+            _project_root() / "macos" / "dist" / "VoiceToText.app",
+            _project_root() / "dist" / "VoiceToText.app",
+            Path("/Applications/VoiceToText.app"),
+        ]
+    )
+    for path in candidates:
+        binary = path / "Contents" / "MacOS" / "VoiceToText"
+        if binary.is_file():
+            return path
+    return None
+
+
+def _render_swift_ui_plist(app: Path) -> str:
+    template = _project_root() / "service" / "ai.vtt2.swift.plist"
+    content = template.read_text(encoding="utf-8")
+    replacements = {
+        "__APP_BINARY__": str(app / "Contents" / "MacOS" / "VoiceToText"),
+        "__PROJECT_DIR__": str(_project_root()),
+        "__HOME__": str(Path.home()),
+    }
+    for placeholder, value in replacements.items():
+        content = content.replace(placeholder, value)
+    return content
+
+
+def _install_swift_ui(app: Path) -> int:
+    print(f"Installing {UI_LABEL} (Swift VoiceToText.app)...")
+    _unload(INSTALLED_UI_PLIST)
+    _prepare_ui_reload()
+    LAUNCH_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+    INSTALLED_UI_PLIST.write_text(_render_swift_ui_plist(app), encoding="utf-8")
+    print(f"  Plist written to {INSTALLED_UI_PLIST}")
+    print(f"  Binary: {app}")
+    result = _load(INSTALLED_UI_PLIST)
+    if result.returncode != 0:
+        print(
+            f"  Warning: launchctl load returned {result.returncode}: "
+            f"{(result.stderr or '').strip()}"
+        )
+    else:
+        print("  Swift UI loaded (login item via LaunchAgent).")
+    return 0
+
+
 def _render_plist(plist_name: str) -> str:
     """Read template plist and replace placeholders."""
     template_path = _project_root() / "service" / plist_name
@@ -133,6 +184,8 @@ def is_orphan_menubar_cmdline(cmdline: list[str] | None) -> bool:
         for flag in ("--install", "--uninstall", "--status", "--health")
     ):
         return False
+    if "Contents/MacOS/VoiceToText" in joined:
+        return True
     return "vtt2/main.py" in joined
 
 
@@ -220,12 +273,22 @@ def install_service() -> int:
     rc = _install_one(STT_LABEL, STT_PLIST_NAME, INSTALLED_STT_PLIST)
     if rc != 0:
         return rc
-    rc = _install_one(
-        UI_LABEL,
-        UI_PLIST_NAME,
-        INSTALLED_UI_PLIST,
-        before_load=_prepare_ui_reload,
-    )
+
+    swift_app = find_voicetotext_app()
+    if swift_app is not None:
+        print(f"  UI: Swift VoiceToText.app ({swift_app})")
+        rc = _install_swift_ui(swift_app)
+    else:
+        print(
+            "  UI: rumps fallback (VoiceToText.app not built; "
+            "run macos/scripts/build.sh)"
+        )
+        rc = _install_one(
+            UI_LABEL,
+            UI_PLIST_NAME,
+            INSTALLED_UI_PLIST,
+            before_load=_prepare_ui_reload,
+        )
     if rc != 0:
         return rc
 
@@ -286,6 +349,12 @@ def service_status() -> int:
     _print_one_status(STT_LABEL, INSTALLED_STT_PLIST)
     print()
     _print_one_status(UI_LABEL, INSTALLED_UI_PLIST)
+    if INSTALLED_UI_PLIST.exists():
+        text = INSTALLED_UI_PLIST.read_text(encoding="utf-8")
+        if "VoiceToText" in text and "src/vtt2/main.py" not in text:
+            print("  Backend: Swift VoiceToText.app")
+        else:
+            print("  Backend: rumps (python)")
     print()
     log_dir = Path.home() / "Library" / "Logs" / "vtt2"
     if log_dir.exists():
