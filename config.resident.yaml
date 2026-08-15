@@ -1,42 +1,38 @@
-# VTTv2 Configuration — profile: idle_unload (default)
+# VTTv2 — profile: resident (always-on model)
 #
-# HTTP process always runs; Whisper weights load on first request and unload
-# after idle_unload_seconds without traffic (frees ~GPU footprint).
-# Always-on snapshot: config.resident.yaml
+# Snapshot of the pre-idle-unload setup: model stays loaded after login/warmup
+# until the STT process exits. Use when you want zero cold-start on every dictate.
+#
+# Activate:
+#   cp config.resident.yaml config.yaml
+#   uv run python src/vtt2/main.py --install
+#
+# Active daily default is config.yaml (idle_unload). See docs/STT_API.md.
 
 app:
   version: "1.4.0"
   name: "VTTv2"
 
-# Локальный STT HTTP (владелец mlx_whisper). Menubar и агенты — клиенты.
 stt_server:
   host: "127.0.0.1"
   port: 8765
   max_upload_mb: 25
   request_timeout_seconds: 600
-  engine: mlx_whisper  # mlx_whisper | whisper_cpp — что грузит ai.vtt2.stt
-  # Do not load ~20GB GPU footprint at login
-  preload_on_start: false
-  # Unload model after 15 minutes without requests (0 = never, see config.resident.yaml)
-  idle_unload_seconds: 900
+  engine: mlx_whisper
+  # Always keep weights in GPU/unified memory
+  preload_on_start: true
+  idle_unload_seconds: 0
 
-# ⭐ Движок транскрипции (menubar)
 transcription:
-  # local_stt — HTTP к ai.vtt2.stt (одна модель)
-  # mlx_whisper / whisper_cpp — in-process (не смешивать с STT)
-  # remote_asr — удалённый GPU ASR
-  engine: local_stt  # local_stt | mlx_whisper | whisper_cpp | remote_asr
+  engine: local_stt
   local_stt:
     base_url: "http://127.0.0.1:8765"
     path: "/v1/audio/transcriptions"
     timeout_seconds: 600
-    # Wait for on-demand model load (cold start after idle)
     warmup_wait_seconds: 180
   mlx_whisper:
-    # Модель MLX (автоматически скачивается при первом использовании)
-    # tiny/small/medium/large-v3-mlx — см. README
     model_name: "mlx-community/whisper-large-v3-mlx"
-    language: "ru"  # "ru" | "en" | "auto" | …  (auto on long RU takes can yield nn / empty)
+    language: "ru"
     temperature: 0.0
     beam_size: 5
     best_of: 5
@@ -44,8 +40,7 @@ transcription:
     compression_ratio_threshold: 2.4
     chunk_size_seconds: 30
     chunk_overlap_seconds: 2
-    # Slightly lower peak GPU buffers vs resident profile (was 6)
-    batch_size: 4
+    batch_size: 6
   whisper_cpp:
     binary_path: "./whisper.cpp/build/bin/whisper-cli"
     model_path: "./models/ggml-medium-q5_0.bin"
@@ -66,7 +61,6 @@ transcription:
     model: "cstr/whisper-large-v3-turbo-int8_float32"
     timeout_seconds: 60
 
-# Аудио
 audio:
   sample_rate: 16000
   channels: 1
@@ -74,7 +68,6 @@ audio:
   chunk_size: 1024
   max_recording_duration: 7200
 
-# UI и управление
 ui:
   auto_paste_enabled: true
   auto_paste_method: cgevent
@@ -85,7 +78,6 @@ menu_bar:
   icon_recording: "🔴"
   show_status: true
 
-# Постобработка текста
 text_processing:
   enabled: false
   strip_whisper_tail_artifacts: true
@@ -93,7 +85,6 @@ text_processing:
     - ru
     - en
 
-# Производительность (menubar process — not STT GPU weights)
 performance:
   use_neural_engine: true
   max_concurrent_tasks: 1
@@ -102,7 +93,6 @@ performance:
   cleanup_threshold_percent: 75
   periodic_cleanup_interval: 10
 
-# Логирование
 logging:
   level: INFO
   format: "%(asctime)s %(levelname)s %(name)s %(message)s"

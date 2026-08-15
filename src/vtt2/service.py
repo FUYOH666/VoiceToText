@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import psutil
+
 logger = logging.getLogger(__name__)
 
 UI_LABEL = "ai.vtt2"
@@ -119,9 +121,64 @@ def _load(plist_path: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _install_one(label: str, plist_name: str, installed: Path) -> int:
+def is_orphan_menubar_cmdline(cmdline: list[str] | None) -> bool:
+    """True for leftover menubar python — never the STT server or --install itself."""
+    if not cmdline:
+        return False
+    joined = " ".join(str(part) for part in cmdline).replace("\\", "/")
+    if "--serve-stt" in joined:
+        return False
+    if any(
+        flag in joined
+        for flag in ("--install", "--uninstall", "--status", "--health")
+    ):
+        return False
+    return "vtt2/main.py" in joined
+
+
+def kill_orphan_menubar(*, current_pid: int | None = None) -> list[int]:
+    """Terminate leftover menubar processes (PPID 1 after reload). Not --serve-stt."""
+    current = os.getpid() if current_pid is None else current_pid
+    killed: list[int] = []
+    for proc in psutil.process_iter(["pid", "cmdline"]):
+        try:
+            pid = proc.info["pid"]
+            if pid == current:
+                continue
+            if not is_orphan_menubar_cmdline(proc.info.get("cmdline")):
+                continue
+            print(f"  Stopping leftover menubar PID {pid}")
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except psutil.TimeoutExpired:
+                proc.kill()
+            killed.append(pid)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return killed
+
+
+def clear_menubar_pid_file() -> None:
+    """Drop menubar pid-file so the freshly loaded UI can acquire it."""
+    from utils.pid_manager import PID_FILE
+
+    if PID_FILE.exists():
+        PID_FILE.unlink(missing_ok=True)
+        print(f"  Removed stale PID file: {PID_FILE}")
+
+
+def _install_one(
+    label: str,
+    plist_name: str,
+    installed: Path,
+    *,
+    before_load=None,
+) -> int:
     print(f"Installing {label}...")
     _unload(installed)
+    if before_load is not None:
+        before_load()
     try:
         content = _render_plist(plist_name)
     except FileNotFoundError as exc:
@@ -141,6 +198,14 @@ def _install_one(label: str, plist_name: str, installed: Path) -> int:
     return 0
 
 
+def _prepare_ui_reload() -> None:
+    """Kill orphan menubar and clear pid so --install always picks up new local_stt."""
+    killed = kill_orphan_menubar()
+    if killed:
+        print(f"  Stopped leftover menubar PIDs: {killed}")
+    clear_menubar_pid_file()
+
+
 def install_service() -> int:
     """Install STT then menubar LaunchAgents."""
     print("Installing VTTv2 services (STT + menubar)...")
@@ -155,7 +220,12 @@ def install_service() -> int:
     rc = _install_one(STT_LABEL, STT_PLIST_NAME, INSTALLED_STT_PLIST)
     if rc != 0:
         return rc
-    rc = _install_one(UI_LABEL, UI_PLIST_NAME, INSTALLED_UI_PLIST)
+    rc = _install_one(
+        UI_LABEL,
+        UI_PLIST_NAME,
+        INSTALLED_UI_PLIST,
+        before_load=_prepare_ui_reload,
+    )
     if rc != 0:
         return rc
 

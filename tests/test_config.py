@@ -82,7 +82,7 @@ class TestConfigLoader:
         config = MLXWhisperConfig()
         
         assert config.model_name == "mlx-community/whisper-medium"
-        assert config.language == "auto"
+        assert config.language == "ru"
         assert config.temperature == 0.0
         assert config.beam_size == 5
     

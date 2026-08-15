@@ -33,7 +33,22 @@ def temp_config_file():
             "mlx_whisper": {
                 "model_name": "mlx-community/whisper-medium",
                 "language": "ru"
-            }
+            },
+            "local_stt": {
+                "base_url": "http://127.0.0.1:8765",
+                "path": "/v1/audio/transcriptions",
+                "timeout_seconds": 60,
+                "warmup_wait_seconds": 30,
+            },
+        },
+        "stt_server": {
+            "host": "127.0.0.1",
+            "port": 8765,
+            "max_upload_mb": 25,
+            "request_timeout_seconds": 60,
+            "engine": "mlx_whisper",
+            "preload_on_start": True,
+            "idle_unload_seconds": 0,
         },
         "audio": {
             "sample_rate": 16000,

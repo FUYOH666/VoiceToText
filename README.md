@@ -1,25 +1,18 @@
 # VTT MLX
 
-**Turn speech into text instantly — wherever you work, no cloud, no subscription.**
+**Private local STT on your Mac.** Option+Space → paste. Same API for agents. No cloud.
 
----
+- **Hotkey:** Option+Space in the menu bar — speak, text lands at the cursor
+- **Private:** speech stays on `127.0.0.1:8765` (OpenAI-compatible `POST /v1/audio/transcriptions`)
+- **Two memory profiles:** default `config.yaml` loads Whisper on demand and unloads after 15 min idle; always-on: `config.resident.yaml`
+- **Install:** `uv sync` then `uv run python src/vtt2/main.py --install` (two LaunchAgents, start on login)
 
-## The Problem
+```bash
+curl -fsS http://127.0.0.1:8765/healthz
+curl -fsS -F file=@sample.wav http://127.0.0.1:8765/v1/audio/transcriptions
+```
 
-You type notes, emails, docs for hours. Your voice is 3x faster.
-
-Cloud transcription costs $10–20/month and sends your data elsewhere. Built-in dictation is slow, unreliable, and doesn't paste where you need it.
-
-## The Solution
-
-VTT sits in your Mac menu bar. Press **Option+Space**, speak, text appears where your cursor is.
-
-By default the **Whisper model lives in one local STT process** (`ai.vtt2.stt` on `127.0.0.1:8765`). The menubar is a thin client — same API agents use (OpenClaw, curl, bots). Optional: remote GPU ASR via Tailscale. No subscription. 99 languages, auto-detected. Works in any app.
-
-## Results
-
-- **Before:** 5 min typing a 2-min voice note, or $20/mo for cloud ASR, or two copies of a local model in RAM
-- **After:** 2 min voice → instant text. One resident MLX model (~3.5 GB) shared by hotkey + HTTP clients; or remote ASR (~120 MB on Mac)
+Optional: remote GPU ASR via Tailscale. Default transcription language is **Russian** (`mlx_whisper.language: ru`).
 
 ---
 
@@ -44,16 +37,16 @@ cd VoiceToText
 uv sync
 ```
 
-Default config: menubar uses `local_stt` → `http://127.0.0.1:8765`; the STT service loads `mlx_whisper` (model downloads on first warmup, ~6 GB for large-v3, then offline). Agent API: [docs/STT_API.md](docs/STT_API.md).
+Default config: menubar uses `local_stt` → `http://127.0.0.1:8765`; STT loads `mlx_whisper` on first request (disk cache ~3 GB; GPU footprint can be much higher while loaded). Profiles: [docs/STT_API.md](docs/STT_API.md).
 
 ### Run
 
 ```bash
-# Terminal A — STT (owns the model)
+# Terminal A — STT HTTP (model may be unloaded until first POST)
 uv run python src/vtt2/main.py --serve-stt
 
-# Terminal B — menubar / hotkeys (after readyz is green)
-curl -fsS http://127.0.0.1:8765/readyz
+# Terminal B — menubar / hotkeys (healthz is enough; readyz may be 503 when idle)
+curl -fsS http://127.0.0.1:8765/healthz
 uv run python src/vtt2/main.py
 ```
 
@@ -75,8 +68,8 @@ uv run python src/vtt2/main.py --uninstall
 ```
 
 ```bash
-# Smoke test STT API
-curl -fsS http://127.0.0.1:8765/readyz
+# Smoke test STT API (POST loads model if idle-unloaded)
+curl -fsS http://127.0.0.1:8765/healthz
 curl -fsS -F file=@sample.wav http://127.0.0.1:8765/v1/audio/transcriptions
 ```
 
@@ -112,7 +105,7 @@ Or I can deploy, customize, and integrate it for your team in **2 weeks** — cu
 ### How it works
 
 1. Press **Option+Space** to start recording
-2. Speak (any language — auto-detected)
+2. Speak (default language: Russian; set `mlx_whisper.language` to `auto` / `en` / …)
 3. Press **Option+Space** again to stop
 4. Menubar POSTs audio to local STT → text is pasted into the active app
 
@@ -125,10 +118,10 @@ Agents use the same `POST /v1/audio/transcriptions` — see [docs/STT_API.md](do
 
 | Mode | Role | RAM on Mac |
 |------|------|------------|
-| `local_stt` (default menubar) | HTTP client → `127.0.0.1:8765` | ~120 MB (UI only) |
-| STT service `stt_server.engine: mlx_whisper` | Owns the model | ~3.5 GB |
-| `mlx_whisper` in menubar | In-process MLX (avoid if STT also running) | ~3.5 GB extra |
-| `remote_asr` | Linux GPU via Tailscale | ~120 MB |
+| `local_stt` (default menubar) | HTTP client → `127.0.0.1:8765` | ~120–200 MB (UI only) |
+| STT + model loaded (`large-v3`) | Owns Whisper | ~4 GB RSS / ~20 GB GPU footprint (Stats) |
+| STT idle-unloaded (default profile) | HTTP only | process light; model freed |
+| `remote_asr` | Linux GPU via Tailscale | ~120 MB on Mac |
 
 **Models (defaults in `config.yaml`):**
 
@@ -203,15 +196,18 @@ All settings are in `config.yaml`. Shape (simplified):
 stt_server:
   host: "127.0.0.1"
   port: 8765
-  engine: mlx_whisper          # model owner (LaunchAgent ai.vtt2.stt)
+  engine: mlx_whisper
+  preload_on_start: false      # default idle profile
+  idle_unload_seconds: 900     # 0 = always-on (see config.resident.yaml)
 
 transcription:
   engine: local_stt            # menubar → HTTP client
   local_stt:
     base_url: "http://127.0.0.1:8765"
+    warmup_wait_seconds: 180   # cold start after idle
   mlx_whisper:
     model_name: "mlx-community/whisper-large-v3-mlx"
-    language: "auto"  # or "en", "ru", "zh", "ja", …
+    language: "ru"  # "ru" | "en" | "auto" | …
 
 audio:
   max_recording_duration: 7200  # seconds (2 hours)
@@ -232,9 +228,9 @@ You can also override settings with environment variables using the `VTT2_` pref
 **Hotkey not working:**
 Add your terminal app to System Settings > Privacy & Security > Accessibility and Input Monitoring. Restart the app.
 
-**STT not ready / menubar fails to transcribe:** Wait for `curl -fsS http://127.0.0.1:8765/readyz`. Check `~/Library/Logs/vtt2/stt.stderr.log`. Reload: `launchctl unload ~/Library/LaunchAgents/ai.vtt2.stt.plist && launchctl load ~/Library/LaunchAgents/ai.vtt2.stt.plist`.
+**STT not ready / slow first dictate:** With idle-unload, `readyz` may be 503 until the first `POST` (or after 15 min idle). Check `curl -fsS http://127.0.0.1:8765/healthz` and `~/Library/Logs/vtt2/stt.stdout.log`. Always-on: `cp config.resident.yaml config.yaml && uv run python src/vtt2/main.py --install`.
 
-**Hotkey stopped responding after recording (stuck):** Restart the UI service: `launchctl unload ~/Library/LaunchAgents/ai.vtt2.plist && launchctl load ~/Library/LaunchAgents/ai.vtt2.plist`. If a zombie remains, `pkill -9 -f 'src/vtt2/main.py'` (careful: also stops STT if matching), remove `~/.local/state/vtt2/vtt2.pid`, then `--install` or load plists again.
+**Two menu-bar icons / dead hotkey after upgrade:** leftover menubar (orphan). Run `uv run python src/vtt2/main.py --install` — it unloads, kills leftover UI (not `--serve-stt`), clears `~/.local/state/vtt2/vtt2.pid`, and reloads both agents so the UI picks up the current `local_stt` client.
 
 **"Model not found" on first run:**
 The model downloads from Hugging Face on first STT warmup. Need internet once; then offline.
@@ -262,7 +258,7 @@ For verbose output: `uv run python src/vtt2/main.py --verbose`
 
 ### Supported languages
 
-Whisper supports 99 languages including English, Russian, Chinese, Japanese, Spanish, French, German, Arabic, Hindi, and many more. Set `language: "auto"` in config (default) and it detects automatically.
+Whisper supports 99 languages. Default is `language: "ru"`. Use `"auto"` only if you need mixed-language detection — on long Russian takes `auto` can pick `nn` and return almost no text.
 
 ### Development
 

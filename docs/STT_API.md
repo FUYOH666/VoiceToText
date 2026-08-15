@@ -10,13 +10,35 @@ http://127.0.0.1:8765
 
 Bind is loopback only. No auth on localhost. Do not expose this port to LAN without adding your own auth.
 
+## Config profiles
+
+| File | Behavior |
+|------|----------|
+| [`config.yaml`](../config.yaml) (**default**) | `preload_on_start: false`, `idle_unload_seconds: 900`, `mlx_whisper.language: ru` — model loads on first request, unloads after 15 min idle |
+| [`config.resident.yaml`](../config.resident.yaml) | Always-on snapshot — model stays loaded after warmup (`idle_unload_seconds: 0`) |
+
+Switch to resident:
+
+```bash
+cp config.resident.yaml config.yaml
+uv run python src/vtt2/main.py --install
+```
+
+Switch back to idle-unload (default in repo):
+
+```bash
+# restore idle profile from git, or keep your edited config.yaml
+git checkout -- config.yaml   # only if you have no local edits you need
+uv run python src/vtt2/main.py --install
+```
+
 ## Endpoints
 
 | Method | Path | Meaning |
 |--------|------|---------|
-| `GET` | `/healthz` | Process alive (`200`) |
-| `GET` | `/readyz` | Model loaded and accepting work (`200`); else `503` |
-| `POST` | `/v1/audio/transcriptions` | Transcribe uploaded audio |
+| `GET` | `/healthz` | Process alive (`200`). Includes `ready`, `loading`, `idle_unload_seconds` |
+| `GET` | `/readyz` | Model loaded (`200`); else `503` (idle / not yet loaded / loading) |
+| `POST` | `/v1/audio/transcriptions` | Transcribe; **loads model on demand** if unloaded |
 
 ### Transcription
 
@@ -32,21 +54,27 @@ Response (minimum):
 {"text": "…"}
 ```
 
-HTTP codes: `400` bad/empty audio, `413` file too large, `503` not ready / busy, `500` internal.
+HTTP codes: `400` bad/empty audio, `413` file too large, `503` load failed / busy / timeout, `500` internal.
 
 Max upload size: `stt_server.max_upload_mb` (default 25). Concurrency: 1.
+
+**Idle unload:** after `idle_unload_seconds` without requests the server drops weights (`readyz` → 503). The next `POST` loads again (cold start; menubar waits up to `local_stt.warmup_wait_seconds`).
 
 ## Examples
 
 ```bash
-# Wait until model is warm (after login / --install)
-curl -fsS http://127.0.0.1:8765/readyz
+# Process up (model may be unloaded)
+curl -fsS http://127.0.0.1:8765/healthz
 
+# May be 503 when idle — that is OK with default profile
+curl -sS http://127.0.0.1:8765/readyz || true
+
+# Loads model if needed, then transcribes
 curl -fsS -F file=@sample.ogg http://127.0.0.1:8765/v1/audio/transcriptions
 # → {"text":"..."}
 ```
 
-OpenAI-style clients: set base URL to `http://127.0.0.1:8765` and use the audio transcriptions endpoint (same path as Whisper API).
+OpenAI-style clients: set base URL to `http://127.0.0.1:8765` and use the audio transcriptions endpoint. Prefer `POST` over assuming `readyz` is always green when using idle-unload.
 
 ## Lifecycle
 
@@ -58,12 +86,10 @@ uv run python src/vtt2/main.py --serve-stt  # foreground debug
 
 Logs: `~/Library/Logs/vtt2/stt.stdout.log`, `stt.stderr.log`.
 
-Config: `stt_server` + `transcription.mlx_whisper` in [`config.yaml`](../config.yaml). Menubar uses `transcription.engine: local_stt`.
-
 ## Architecture note
 
 ```
-agent / menubar  →  POST 127.0.0.1:8765  →  mlx_whisper (resident)
+agent / menubar  →  POST 127.0.0.1:8765  →  mlx_whisper (load ↔ idle unload)
 ```
 
 Whisper tail-artifact stripping runs on the server so all clients get the same text.

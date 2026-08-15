@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class MLXWhisperConfig(BaseModel):
     """Конфигурация MLX Whisper"""
     model_name: str = Field("mlx-community/whisper-medium", description="Название модели MLX (например, mlx-community/whisper-medium)")
-    language: Optional[str] = Field("auto", description="Язык транскрипции: 'auto' для автоопределения, или код языка ('ru', 'en', 'zh', 'ja' и т.д.)")
+    language: Optional[str] = Field("ru", description="Язык транскрипции: 'ru' (default), 'auto' для автоопределения, или код языка ('en', 'zh', 'ja' и т.д.)")
     temperature: float = Field(0.0, ge=0.0, le=1.0, description="Temperature")
     beam_size: int = Field(5, ge=1, description="Beam size")
     best_of: int = Field(5, ge=1, description="Best of")
@@ -59,6 +59,12 @@ class LocalSTTConfig(BaseModel):
     timeout_seconds: int = Field(
         600, ge=5, le=3600, description="Таймаут запроса (секунды)"
     )
+    warmup_wait_seconds: int = Field(
+        180,
+        ge=0,
+        le=3600,
+        description="Сколько ждать on-demand load модели при 503 (idle unload)",
+    )
 
 
 class STTServerConfig(BaseModel):
@@ -72,6 +78,16 @@ class STTServerConfig(BaseModel):
     engine: Literal["mlx_whisper", "whisper_cpp"] = Field(
         "mlx_whisper",
         description="Движок, который грузит STT-сервер (не local_stt/remote_asr)",
+    )
+    preload_on_start: bool = Field(
+        True,
+        description="Загружать модель при старте процесса (false = on-demand)",
+    )
+    idle_unload_seconds: int = Field(
+        0,
+        ge=0,
+        le=86400,
+        description="Выгрузить модель после N секунд без запросов (0 = никогда)",
     )
 
 

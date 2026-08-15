@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import time
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -15,13 +16,14 @@ from stt_server import create_app, state
 
 def _minimal_config(**overrides) -> Config:
     data = {
-        "app": {"version": "1.3.0", "name": "VTTv2"},
+        "app": {"version": "1.4.0", "name": "VTTv2"},
         "transcription": {
             "engine": "local_stt",
             "local_stt": {
                 "base_url": "http://127.0.0.1:8765",
                 "path": "/v1/audio/transcriptions",
                 "timeout_seconds": 60,
+                "warmup_wait_seconds": 30,
             },
             "mlx_whisper": {
                 "model_name": "mlx-community/whisper-tiny-mlx",
@@ -52,9 +54,16 @@ def _minimal_config(**overrides) -> Config:
             "max_upload_mb": 1,
             "request_timeout_seconds": 60,
             "engine": "mlx_whisper",
+            "preload_on_start": True,
+            "idle_unload_seconds": 0,
         },
     }
-    data.update(overrides)
+    # deep-merge stt_server / transcription if provided
+    for key, value in overrides.items():
+        if key in data and isinstance(data[key], dict) and isinstance(value, dict):
+            data[key] = {**data[key], **value}
+        else:
+            data[key] = value
     return Config(**data)
 
 
@@ -85,7 +94,9 @@ class TestSTTServerAPI:
         client, _ = mock_ready_app
         r = client.get("/healthz")
         assert r.status_code == 200
-        assert r.json()["status"] == "ok"
+        body = r.json()
+        assert body["status"] == "ok"
+        assert "idle_unload_seconds" in body
 
     def test_readyz_200_when_ready(self, mock_ready_app):
         client, _ = mock_ready_app
@@ -128,7 +139,7 @@ class TestSTTServerAPI:
         )
         assert r.status_code == 400
 
-    def test_readyz_503_before_ready(self):
+    def test_readyz_503_when_preload_fails(self):
         config = _minimal_config()
 
         def boom(*_a, **_k):
@@ -140,11 +151,76 @@ class TestSTTServerAPI:
                 r = client.get("/readyz")
                 assert r.status_code == 503
                 assert r.json()["status"] == "not_ready"
-                tr = client.post(
-                    "/v1/audio/transcriptions",
-                    files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
-                )
-                assert tr.status_code == 503
+
+
+class TestIdleUnload:
+    def test_ondemand_start_readyz_503_then_post_loads(self):
+        config = _minimal_config(
+            stt_server={
+                "host": "127.0.0.1",
+                "port": 8765,
+                "max_upload_mb": 1,
+                "request_timeout_seconds": 60,
+                "engine": "mlx_whisper",
+                "preload_on_start": False,
+                "idle_unload_seconds": 900,
+            }
+        )
+        mock_engine = MagicMock()
+        mock_engine.transcribe.return_value = "ok"
+
+        with patch("stt_server.TranscriptionEngineWrapper", return_value=mock_engine):
+            with patch("stt_server._warmup", return_value=None):
+                app = create_app(config)
+                with TestClient(app) as client:
+                    assert client.get("/healthz").status_code == 200
+                    assert client.get("/healthz").json()["ready"] is False
+                    rz = client.get("/readyz")
+                    assert rz.status_code == 503
+                    r = client.post(
+                        "/v1/audio/transcriptions",
+                        files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+                    )
+                    assert r.status_code == 200
+                    assert r.json()["text"] == "ok"
+                    assert client.get("/readyz").status_code == 200
+
+    def test_idle_unload_clears_ready(self):
+        config = _minimal_config(
+            stt_server={
+                "host": "127.0.0.1",
+                "port": 8765,
+                "max_upload_mb": 1,
+                "request_timeout_seconds": 60,
+                "engine": "mlx_whisper",
+                "preload_on_start": True,
+                "idle_unload_seconds": 1,
+            }
+        )
+        mock_engine = MagicMock()
+        mock_engine.transcribe.return_value = "x"
+
+        with patch("stt_server.TranscriptionEngineWrapper", return_value=mock_engine):
+            with patch("stt_server._warmup", return_value=None):
+                app = create_app(config)
+                with TestClient(app) as client:
+                    assert client.get("/readyz").status_code == 200
+                    # Simulate idle past threshold and run unload logic under lock
+                    state.last_used_at = time.time() - 10
+                    with patch("stt_server._release_mlx_cache"):
+                        import asyncio
+                        from stt_server import _unload_model_sync
+
+                        _unload_model_sync()
+                    assert state.ready is False
+                    assert client.get("/readyz").status_code == 503
+                    # POST reloads
+                    r = client.post(
+                        "/v1/audio/transcriptions",
+                        files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+                    )
+                    assert r.status_code == 200
+                    assert client.get("/readyz").status_code == 200
 
 
 class TestLocalSTTClient:
@@ -178,7 +254,8 @@ class TestLocalSTTClient:
                 return False
 
             def get(self, url):
-                assert url.endswith("/readyz")
+                if url.endswith("/healthz"):
+                    return FakeResp(200, {"status": "ok", "ready": True})
                 return FakeResp(200, {"status": "ready"})
 
             def post(self, url, files=None):
@@ -189,7 +266,7 @@ class TestLocalSTTClient:
             t = LocalSTTTranscriber(config)
             assert t.transcribe(audio) == "ok from stt"
 
-    def test_not_ready_raises(self):
+    def test_healthz_down_raises(self):
         from transcription.local_stt import LocalSTTTranscriber
 
         config = _minimal_config()
@@ -207,15 +284,62 @@ class TestLocalSTTClient:
 
             def get(self, url):
                 class R:
-                    status_code = 503
-                    text = '{"status":"not_ready"}'
+                    status_code = 500
+                    text = "dead"
 
                 return R()
 
         with patch("transcription.local_stt.httpx.Client", FakeClient):
             t = LocalSTTTranscriber(config)
-            with pytest.raises(RuntimeError, match="не готов"):
+            with pytest.raises(RuntimeError, match="healthz"):
                 t.transcribe(audio)
+
+    def test_retries_503_then_ok(self):
+        from transcription.local_stt import LocalSTTTranscriber
+
+        config = _minimal_config()
+        audio = np.zeros(1600, dtype=np.float32)
+        posts = {"n": 0}
+
+        class FakeResp:
+            def __init__(self, code, payload=None, text=""):
+                self.status_code = code
+                self._payload = payload or {}
+                self.text = text
+
+            def json(self):
+                return self._payload
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise Exception(f"http {self.status_code}")
+
+        class FakeClient:
+            def __init__(self, *a, **k):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def get(self, url):
+                if url.endswith("/healthz"):
+                    return FakeResp(200, {"status": "ok"})
+                return FakeResp(503, text='{"detail":"model loading"}')
+
+            def post(self, url, files=None):
+                posts["n"] += 1
+                if posts["n"] == 1:
+                    return FakeResp(503, text='{"detail":"model loading"}')
+                return FakeResp(200, {"text": "after warmup"})
+
+        with patch("transcription.local_stt.httpx.Client", FakeClient):
+            with patch("transcription.local_stt.time.sleep", return_value=None):
+                t = LocalSTTTranscriber(config)
+                assert t.transcribe(audio) == "after warmup"
+                assert posts["n"] == 2
 
 
 class TestSTTServerConfig:
@@ -228,12 +352,23 @@ class TestSTTServerConfig:
                     "max_upload_mb": 25,
                     "request_timeout_seconds": 600,
                     "engine": "mlx_whisper",
+                    "preload_on_start": True,
+                    "idle_unload_seconds": 0,
                 }
             )
 
     def test_default_config_yaml_loads(self, project_root):
         cfg = Config.from_yaml(str(project_root / "config.yaml"), project_root)
-        assert cfg.app.version == "1.3.0"
+        assert cfg.app.version == "1.4.0"
         assert cfg.transcription.engine == "local_stt"
         assert cfg.stt_server.port == 8765
         assert cfg.stt_server.host == "127.0.0.1"
+        assert cfg.stt_server.preload_on_start is False
+        assert cfg.stt_server.idle_unload_seconds == 900
+        assert cfg.transcription.mlx_whisper.language == "ru"
+
+    def test_resident_config_yaml_loads(self, project_root):
+        cfg = Config.from_yaml(str(project_root / "config.resident.yaml"), project_root)
+        assert cfg.stt_server.preload_on_start is True
+        assert cfg.stt_server.idle_unload_seconds == 0
+        assert cfg.transcription.mlx_whisper.language == "ru"

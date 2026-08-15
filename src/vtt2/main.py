@@ -5,6 +5,7 @@ Voice-to-Text для macOS с MLX Whisper
 import sys
 import signal
 import argparse
+import logging
 import threading
 import time
 from pathlib import Path
@@ -98,6 +99,18 @@ class VTT2App(rumps.App):
         with self._state_lock:
             self._is_processing = value
 
+    def _run_on_main(self, fn) -> None:
+        """rumps/AppKit UI must be updated on the main thread (hotkey runs on pynput thread)."""
+        if threading.current_thread() is threading.main_thread():
+            fn()
+        elif APPHELPER_AVAILABLE:
+            AppHelper.callAfter(fn)
+        else:
+            fn()
+
+    def _set_menu_title(self, title: str) -> None:
+        self._run_on_main(lambda: setattr(self, "title", title))
+
     def _init_components(self):
         """Инициализация всех компонентов"""
         try:
@@ -119,17 +132,9 @@ class VTT2App(rumps.App):
             if not input_monitoring_ok:
                 self.logger.warning("⚠️ Разрешение Input Monitoring не предоставлено")
                 self.logger.warning("⚠️ Автовставка может не работать")
-                self.logger.warning("⚠️ Перейдите в Системные настройки > Конфиденциальность и безопасность > Мониторинг ввода")
-                # Не завершаем приложение, но предупреждаем пользователя
-                if self.config.ui.auto_paste_enabled:
-                    rumps.alert(
-                        "Требуется разрешение",
-                        "Для автовставки текста требуется разрешение 'Мониторинг ввода'.\n\n"
-                        "Перейдите в:\n"
-                        "Системные настройки > Конфиденциальность и безопасность > Мониторинг ввода\n\n"
-                        "Добавьте Terminal или это приложение в список разрешенных.",
-                        ok="Понятно"
-                    )
+                self.logger.warning(
+                    "⚠️ Системные настройки > Конфиденциальность и безопасность > Мониторинг ввода"
+                )
             
             # Инициализация сервисов
             self.audio_recorder = AudioRecorder(self.config)
@@ -141,7 +146,6 @@ class VTT2App(rumps.App):
             
         except Exception as e:
             self.logger.error(f"Ошибка инициализации компонентов: {e}")
-            rumps.alert("Ошибка", f"Не удалось инициализировать приложение: {e}")
             sys.exit(1)
     
     def _request_microphone_permission(self):
@@ -230,7 +234,7 @@ class VTT2App(rumps.App):
                     self.logger.warning("⚠️ Не удалось сохранить активное приложение, автовставка может не работать")
             
             self.is_recording = True
-            self.title = self.config.menu_bar.icon_recording
+            self._set_menu_title(self.config.menu_bar.icon_recording)
             self._update_status("ЗАПИСЬ")
             
             self.audio_recorder.start_recording()
@@ -239,9 +243,10 @@ class VTT2App(rumps.App):
         except Exception as e:
             self.logger.error(f"Ошибка начала записи: {e}")
             self.is_recording = False
-            self.title = self.config.menu_bar.icon_idle
+            self._set_menu_title(self.config.menu_bar.icon_idle)
             self._update_status("Ошибка")
-            rumps.alert("Ошибка", f"Не удалось начать запись: {e}")
+            # No rumps.alert on hotkey path — NSAlert from a LaunchAgent
+            # appears behind other apps / flashes Python in the Dock.
     
     def stop_recording(self):
         """Остановка записи и обработка"""
@@ -250,6 +255,7 @@ class VTT2App(rumps.App):
         
         try:
             self.is_recording = False
+            self._set_menu_title(self.config.menu_bar.icon_idle)
             self._update_status("Обработка...")
             
             # Остановка записи
@@ -257,7 +263,7 @@ class VTT2App(rumps.App):
             
             if audio_data is None or len(audio_data) == 0:
                 self.logger.warning("Нет аудио данных")
-                self.title = self.config.menu_bar.icon_idle
+                self._set_menu_title(self.config.menu_bar.icon_idle)
                 self._update_status("Готов")
                 return
             
@@ -275,7 +281,7 @@ class VTT2App(rumps.App):
             
         except Exception as e:
             self.logger.error(f"Ошибка остановки записи: {e}")
-            self.title = self.config.menu_bar.icon_idle
+            self._set_menu_title(self.config.menu_bar.icon_idle)
             self._update_status("Ошибка")
     
     def _process_audio(self, audio_data):
@@ -395,19 +401,27 @@ class VTT2App(rumps.App):
     def _finalize_processing(self, text):
         """Завершение обработки"""
         self.is_processing = False
-        self.title = self.config.menu_bar.icon_idle
-        
+
+        def apply_ui():
+            self.title = self.config.menu_bar.icon_idle
+            if hasattr(self, "menu") and self.menu:
+                status_item = self.menu["📍 Статус: Готов"]
+                status_item.title = f"📍 Статус: {'Готов' if text else 'Ошибка'}"
+
+        self._run_on_main(apply_ui)
+
         if text:
-            self._update_status("Готов")
             self.logger.info(f"Транскрипция завершена: {len(text)} символов")
-        else:
-            self._update_status("Ошибка")
     
     def _update_status(self, status: str):
         """Обновление статуса в меню"""
-        if hasattr(self, 'menu') and self.menu:
-            status_item = self.menu["📍 Статус: Готов"]
-            status_item.title = f"📍 Статус: {status}"
+
+        def apply_ui():
+            if hasattr(self, "menu") and self.menu:
+                status_item = self.menu["📍 Статус: Готов"]
+                status_item.title = f"📍 Статус: {status}"
+
+        self._run_on_main(apply_ui)
     
     @rumps.clicked("📋 Копировать текст")
     def copy_text(self, _):
@@ -609,6 +623,18 @@ def health_check_command(config_path: str = "config.yaml"):
                 checks["remote_asr"] = "❌ ASR недоступен (проверьте Tailscale)"
         except Exception as e:
             checks["remote_asr"] = f"❌ {e}"
+    elif engine_type == "local_stt":
+        try:
+            import httpx
+
+            base = (config.transcription.local_stt.base_url or "").rstrip("/")
+            response = httpx.get(f"{base}/healthz", timeout=5.0)
+            if response.status_code == 200:
+                checks["local_stt"] = "✅"
+            else:
+                checks["local_stt"] = f"❌ healthz {response.status_code}"
+        except Exception as e:
+            checks["local_stt"] = f"❌ {e}"
 
     # Вывод результатов
     print("\n=== Результаты Health Check ===")
@@ -639,6 +665,18 @@ def health_check_command(config_path: str = "config.yaml"):
         print("\n⚠️ Некоторые проверки не пройдены, но приложение может работать")
         print("   Разрешения будут запрошены при первом запуске")
         return 0  # Возвращаем 0, так как это не критично для health check
+
+
+def _set_accessory_activation_policy() -> None:
+    """Keep menubar out of the Dock (no LSUIElement plist on a uv script)."""
+    try:
+        from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+
+        NSApplication.sharedApplication().setActivationPolicy_(
+            NSApplicationActivationPolicyAccessory
+        )
+    except Exception as e:
+        logging.getLogger("vtt2").debug("activation policy accessory: %s", e)
 
 
 def _resolve_project_root(config_path: str) -> Path:
@@ -722,6 +760,7 @@ def main():
         print("VTT2 already running. Use --status to check.")
         sys.exit(1)
 
+    _set_accessory_activation_policy()
     app = VTT2App(config)
 
     # Graceful shutdown on SIGTERM (sent by launchctl stop)

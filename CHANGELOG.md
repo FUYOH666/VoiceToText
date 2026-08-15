@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0] - 2026-08-15
+
+### Added
+- **Idle unload** for STT: `stt_server.preload_on_start` + `stt_server.idle_unload_seconds` — weights load on demand and drop after idle (frees GPU/unified footprint).
+- **Config profiles:** [`config.resident.yaml`](config.resident.yaml) (always-on snapshot) and default [`config.yaml`](config.yaml) (idle unload, 15 min).
+- Client `local_stt.warmup_wait_seconds` — retry on 503 while model loads.
+- `/healthz` fields: `loading`, `idle_unload_seconds`, `preload_on_start`.
+
+### Changed
+- Default profile no longer preloads large-v3 at login; first dictate after idle may cold-start.
+- `batch_size` default in idle profile: 4 (was 6).
+- Default `mlx_whisper.language` is `ru` (both profiles) — `auto` on long Russian takes could return `nn` / near-empty text.
+- `--health` checks `local_stt` via `GET /healthz`.
+- Menubar uses accessory activation policy (less Python Dock flash).
+
+### Fixed
+- Hotkey / startup no longer call `rumps.alert` (NSAlert from LaunchAgent appeared behind apps). Errors go to log + menu-bar status; alerts stay on explicit menu clicks.
+- `--install` kills leftover menubar processes (not `--serve-stt`), clears `vtt2.pid`, then reloads UI so `local_stt` client updates after STT reload.
+
 ## [1.3.0] - 2026-07-25
 
 ### Added
