@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.0] - 2026-08-16
+
+### Added
+- OpenAI-compatible `response_format` on `POST /v1/audio/transcriptions`: `json` (default `{text}`), `verbose_json` (full transcript + segment timecodes), `text`.
+- Optional `timestamp_granularities` / `timestamp_granularities[]=word` for word-level timings in `verbose_json`.
+- HTTP path uses native MLX Whisper decode (`transcribe_detailed`) so ~10 minute agent jobs keep correct offsets (custom long-audio chunk merge is not used here).
+
+### Changed
+- Default `stt_server.max_upload_mb` is 40 (headroom for ~10 min 16 kHz WAV). Timeout stays 600s. Concurrency remains 1 — a long job still blocks Option+Space until it finishes.
+
 ## [1.5.1] - 2026-08-15
 
 ### Changed

@@ -1,6 +1,6 @@
 [project]
 name = "vtt-mlx-m4"
-version = "1.5.1"
+version = "1.6.0"
 description = "Private local STT for Apple Silicon. Option+Space. No cloud, no subscription."
 readme = "README.md"
 requires-python = ">=3.12"

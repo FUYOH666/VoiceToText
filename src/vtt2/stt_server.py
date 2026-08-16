@@ -21,7 +21,7 @@ from typing import Any, Optional
 import numpy as np
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from audio.decode import AudioDecodeError, decode_audio_bytes
 from audio.processor import AudioProcessor
@@ -72,6 +72,30 @@ def _strip_artifacts(text: str, config: Config) -> str:
             len(text) - len(cleaned),
         )
     return cleaned
+
+
+def _strip_artifacts_payload(payload: dict, config: Config) -> dict:
+    """Strip Whisper tail artifacts on full text and the last segment."""
+    segments = list(payload.get("segments") or [])
+    if segments:
+        last = dict(segments[-1])
+        last["text"] = _strip_artifacts(last.get("text") or "", config)
+        if last["text"].strip():
+            segments[-1] = last
+        else:
+            segments = segments[:-1]
+        payload["segments"] = segments
+        payload["text"] = " ".join(
+            (s.get("text") or "").strip() for s in segments if (s.get("text") or "").strip()
+        ).strip()
+    else:
+        payload["text"] = _strip_artifacts(payload.get("text") or "", config)
+    return payload
+
+
+def _want_word_timestamps(*parts: Optional[str]) -> bool:
+    blob = " ".join(p for p in parts if p)
+    return "word" in blob.lower()
 
 
 def _warmup(engine: TranscriptionEngineWrapper, sample_rate: int) -> None:
@@ -287,9 +311,24 @@ def create_app(config: Config) -> FastAPI:
         file: UploadFile = File(...),
         model: Optional[str] = Form(None),
         language: Optional[str] = Form(None),
-    ) -> dict[str, Any]:
+        response_format: str = Form("json"),
+        timestamp_granularities: Optional[str] = Form(None),
+        timestamp_granularities_bracket: Optional[str] = Form(
+            None, alias="timestamp_granularities[]"
+        ),
+    ):
         if state.config is None:
             raise HTTPException(status_code=503, detail="STT not initialized")
+
+        fmt = (response_format or "json").strip().lower()
+        if fmt not in ("json", "verbose_json", "text"):
+            raise HTTPException(
+                status_code=400,
+                detail="response_format must be json, verbose_json, or text",
+            )
+        want_words = _want_word_timestamps(
+            timestamp_granularities, timestamp_granularities_bracket
+        )
 
         cfg = state.config
         max_bytes = cfg.stt_server.max_upload_mb * 1024 * 1024
@@ -314,6 +353,12 @@ def create_app(config: Config) -> FastAPI:
             logger.info("STT request model=%s (server uses %s)", model, state.model_name)
         if language:
             logger.info("STT request language=%s", language)
+        if fmt != "json" or want_words:
+            logger.info(
+                "STT request response_format=%s timestamp_granularities=%s",
+                fmt,
+                timestamp_granularities,
+            )
 
         try:
             audio = decode_audio_bytes(
@@ -342,11 +387,21 @@ def create_app(config: Config) -> FastAPI:
             assert state.engine is not None and state.processor is not None
             audio = state.processor.prepare_for_whisper(audio)
             state.last_used_at = time.time()
+            duration_s = len(audio) / float(cfg.audio.sample_rate)
+            if duration_s >= 60:
+                logger.info(
+                    "STT long job: %.1fs audio (blocks menubar until done; concurrency=1)",
+                    duration_s,
+                )
 
             start = time.time()
             try:
-                text = await asyncio.wait_for(
-                    asyncio.to_thread(state.engine.transcribe, audio),
+                payload = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        state.engine.transcribe_detailed,
+                        audio,
+                        word_timestamps=want_words,
+                    ),
                     timeout=float(cfg.stt_server.request_timeout_seconds),
                 )
             except asyncio.TimeoutError as e:
@@ -358,17 +413,30 @@ def create_app(config: Config) -> FastAPI:
                 raise HTTPException(status_code=500, detail="Transcription failed") from e
 
             state.last_used_at = time.time()
-            text = _strip_artifacts(text or "", cfg)
+            payload = _strip_artifacts_payload(payload or {}, cfg)
+            payload["duration"] = float(payload.get("duration") or duration_s)
             elapsed = time.time() - start
-            duration_s = len(audio) / float(cfg.audio.sample_rate)
             logger.info(
-                "STT ok: %.1fs audio → %d chars in %.2fs lang=%s",
+                "STT ok: %.1fs audio → %d chars / %d segments in %.2fs format=%s",
                 duration_s,
-                len(text),
+                len(payload.get("text") or ""),
+                len(payload.get("segments") or []),
                 elapsed,
-                language or "auto",
+                fmt,
             )
-            body: dict[str, Any] = {"text": text}
+            text = payload.get("text") or ""
+            if fmt == "text":
+                return PlainTextResponse(content=text)
+            if fmt == "verbose_json":
+                body = {
+                    "task": "transcribe",
+                    "language": payload.get("language") or language or "ru",
+                    "duration": payload["duration"],
+                    "text": text,
+                    "segments": payload.get("segments") or [],
+                }
+                return body
+            body = {"text": text}
             if language:
                 body["language"] = language
             return body

@@ -16,6 +16,8 @@
 ```bash
 curl -fsS http://127.0.0.1:8765/healthz
 curl -fsS -F file=@sample.wav http://127.0.0.1:8765/v1/audio/transcriptions
+curl -fsS -F file=@sample.wav -F response_format=verbose_json \
+  http://127.0.0.1:8765/v1/audio/transcriptions
 ```
 
 Default language is Russian (`mlx_whisper.language: ru`).
@@ -66,7 +68,7 @@ Or I can deploy, customize, and integrate it for your team in **2 weeks**.
 
 The orange microphone pill is macOS (privacy). The waveform is VoiceToText.
 
-Agents use the same `POST /v1/audio/transcriptions` — [docs/STT_API.md](docs/STT_API.md).
+Agents use the same `POST /v1/audio/transcriptions` — [docs/STT_API.md](docs/STT_API.md). For a full transcript with timecodes (up to ~10 minutes), send `response_format=verbose_json`.
 
 Default profile loads Whisper on demand and unloads after 15 minutes idle. Always-on: `config.resident.yaml`.
 
@@ -98,6 +100,8 @@ transcription:
 **Paste does nothing:** Privacy → Accessibility and Input Monitoring → **VoiceToText**. After rebuild, delete the stale row and add the current `.app`. Text is also on the clipboard (Cmd+V). Menu: «Разрешения…».
 
 **STT slow / `readyz` 503:** idle-unload. `healthz` is enough; the next POST loads the model. Always-on: `cp config.resident.yaml config.yaml && uv run python src/vtt2/main.py --install`.
+
+**After a git pull of STT:** restart the model process so agents see the new contract — `launchctl kickstart -k gui/$(id -u)/ai.vtt2.stt`. Menubar can stay running.
 
 **Two menu bar icons:** `uv run python src/vtt2/main.py --install` kills leftover UI (not `--serve-stt`).
 

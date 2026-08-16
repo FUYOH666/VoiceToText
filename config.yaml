@@ -5,14 +5,14 @@
 # Always-on snapshot: config.resident.yaml
 
 app:
-  version: "1.5.1"
+  version: "1.6.0"
   name: "VTTv2"
 
 # Локальный STT HTTP (владелец mlx_whisper). Menubar и агенты — клиенты.
 stt_server:
   host: "127.0.0.1"
   port: 8765
-  max_upload_mb: 25
+  max_upload_mb: 40  # ~10 min 16 kHz mono WAV plus headroom
   request_timeout_seconds: 600
   engine: mlx_whisper  # mlx_whisper | whisper_cpp — что грузит ai.vtt2.stt
   # Do not load ~20GB GPU footprint at login

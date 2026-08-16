@@ -71,7 +71,7 @@ class STTServerConfig(BaseModel):
     """Локальный OpenAI-compatible STT HTTP сервер (владелец модели)"""
     host: str = Field("127.0.0.1", description="Bind host (только loopback)")
     port: int = Field(8765, ge=1, le=65535, description="Порт STT API")
-    max_upload_mb: int = Field(25, ge=1, le=200, description="Лимит размера файла (MB)")
+    max_upload_mb: int = Field(40, ge=1, le=200, description="Лимит размера файла (MB)")
     request_timeout_seconds: int = Field(
         600, ge=30, le=3600, description="Таймаут обработки одного запроса"
     )

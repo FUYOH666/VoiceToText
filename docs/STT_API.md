@@ -42,21 +42,43 @@ uv run python src/vtt2/main.py --install
 
 ### Transcription
 
+Same URL for menubar and agents. Default response stays `{"text":"…"}` so existing clients do not break. Long jobs (up to ~10 minutes) use native Whisper windowing with correct segment offsets.
+
 Multipart form:
 
 - `file` (required) — audio (`wav`, `flac`, …; `ogg`/`webm`/`m4a` via `ffmpeg` if installed)
 - `language` (optional) — hint, logged
 - `model` (optional) — logged; server uses `config.yaml` model
+- `response_format` (optional) — `json` (default), `verbose_json`, `text`
+- `timestamp_granularities` / `timestamp_granularities[]` (optional) — include `word` for word-level timings (only in `verbose_json`)
 
-Response (minimum):
+Default JSON (menubar / simple clients):
 
 ```json
 {"text": "…"}
 ```
 
-HTTP codes: `400` bad/empty audio, `413` file too large, `503` load failed / busy / timeout, `500` internal.
+`response_format=verbose_json` (agents that need timecodes):
 
-Max upload size: `stt_server.max_upload_mb` (default 25). Concurrency: 1.
+```json
+{
+  "task": "transcribe",
+  "language": "ru",
+  "duration": 612.3,
+  "text": "…",
+  "segments": [
+    {"id": 0, "start": 0.0, "end": 4.2, "text": "…"}
+  ]
+}
+```
+
+With `timestamp_granularities=word`, a segment may also include `"words": [{"word":"…","start":0.0,"end":0.4}]`.
+
+`response_format=text` returns plaintext (`text/plain`), not JSON.
+
+HTTP codes: `400` bad/empty audio or invalid `response_format`, `413` file too large, `503` load failed / busy / timeout, `500` internal.
+
+Max upload size: `stt_server.max_upload_mb` (default 40 — enough for ~10 min 16 kHz WAV). Request timeout: `stt_server.request_timeout_seconds` (default 600). **Concurrency: 1** — a 10 minute job blocks Option+Space until it finishes.
 
 **Idle unload:** after `idle_unload_seconds` without requests the server drops weights (`readyz` → 503). The next `POST` loads again (cold start; menubar waits up to `local_stt.warmup_wait_seconds`).
 
@@ -69,12 +91,24 @@ curl -fsS http://127.0.0.1:8765/healthz
 # May be 503 when idle — that is OK with default profile
 curl -sS http://127.0.0.1:8765/readyz || true
 
-# Loads model if needed, then transcribes
+# Default: {"text":"..."}  (menubar / simple clients)
 curl -fsS -F file=@sample.ogg http://127.0.0.1:8765/v1/audio/transcriptions
-# → {"text":"..."}
+
+# Full transcript + segment timecodes (agents, ~10 min audio)
+curl -fsS \
+  -F file=@meeting.wav \
+  -F response_format=verbose_json \
+  http://127.0.0.1:8765/v1/audio/transcriptions
+
+# Optional word-level timings (OpenAI-style field name)
+curl -fsS \
+  -F file=@meeting.wav \
+  -F response_format=verbose_json \
+  -F 'timestamp_granularities[]=word' \
+  http://127.0.0.1:8765/v1/audio/transcriptions
 ```
 
-OpenAI-style clients: set base URL to `http://127.0.0.1:8765` and use the audio transcriptions endpoint. Prefer `POST` over assuming `readyz` is always green when using idle-unload.
+OpenAI-style clients: set base URL to `http://127.0.0.1:8765` and use the audio transcriptions endpoint. Prefer `POST` over assuming `readyz` is always green when using idle-unload. For timestamps, set `response_format="verbose_json"`.
 
 ## Lifecycle
 
@@ -82,6 +116,9 @@ OpenAI-style clients: set base URL to `http://127.0.0.1:8765` and use the audio 
 uv run python src/vtt2/main.py --install    # ai.vtt2.stt + ai.vtt2
 uv run python src/vtt2/main.py --status
 uv run python src/vtt2/main.py --serve-stt  # foreground debug
+
+# After pulling a new STT version, restart the model process (menubar can stay)
+launchctl kickstart -k "gui/$(id -u)/ai.vtt2.stt"
 ```
 
 Logs: `~/Library/Logs/vtt2/stt.stdout.log`, `stt.stderr.log`.
@@ -92,4 +129,4 @@ Logs: `~/Library/Logs/vtt2/stt.stdout.log`, `stt.stderr.log`.
 agent / menubar  →  POST 127.0.0.1:8765  →  mlx_whisper (load ↔ idle unload)
 ```
 
-Whisper tail-artifact stripping runs on the server so all clients get the same text.
+Whisper tail-artifact stripping runs on the server so all clients get the same text (last segment, then rejoined `text`).

@@ -146,6 +146,99 @@ class MLXWhisperTranscriber:
         else:
             logger.debug("Используется стандартная обработка для короткой записи")
             return self._transcribe_short_audio(audio_data)
+
+    def transcribe_detailed(
+        self,
+        audio_data: np.ndarray,
+        *,
+        word_timestamps: bool = False,
+    ) -> dict:
+        """
+        Full native mlx_whisper decode with segment (and optional word) timestamps.
+
+        Do not use transcribe_long_audio here — custom chunk merge drops timings.
+        Whisper already windows ~30s internally with correct offsets. Use this for
+        HTTP verbose_json and any 10+ minute agent job that needs timecodes.
+        """
+        start_time = time.time()
+        duration = len(audio_data) / float(self.sample_rate)
+        logger.info(
+            "MLX detailed transcribe: %.1fs audio word_timestamps=%s",
+            duration,
+            word_timestamps,
+        )
+        try:
+            if audio_data.dtype != np.float32:
+                audio_data = audio_data.astype(np.float32)
+            max_val = max(abs(float(audio_data.max())), abs(float(audio_data.min())), 1e-9)
+            if max_val > 1.0:
+                audio_data = audio_data / max_val
+
+            language_param = None
+            if self.mlx_config.language and self.mlx_config.language.lower() != "auto":
+                language_param = self.mlx_config.language
+
+            result = whisper.transcribe(
+                audio_data,
+                path_or_hf_repo=self.mlx_config.model_name,
+                language=language_param,
+                temperature=self.mlx_config.temperature,
+                compression_ratio_threshold=self.mlx_config.compression_ratio_threshold,
+                no_speech_threshold=self.mlx_config.no_speech_threshold,
+                word_timestamps=word_timestamps,
+                verbose=False,
+            )
+            payload = self._normalize_detailed_result(result, duration)
+            elapsed = time.time() - start_time
+            self._transcription_count += 1
+            logger.info(
+                "MLX detailed done in %.2fs: %d chars, %d segments",
+                elapsed,
+                len(payload["text"]),
+                len(payload["segments"]),
+            )
+            return payload
+        except Exception as e:
+            logger.error("Ошибка detailed-транскрипции MLX: %s", e)
+            raise RuntimeError(f"Ошибка транскрипции MLX: {e}") from e
+
+    def _normalize_detailed_result(self, result, duration: float) -> dict:
+        text = self._extract_text_from_result(result)
+        language = None
+        raw_segments = []
+        if isinstance(result, dict):
+            language = result.get("language")
+            raw_segments = result.get("segments") or []
+        segments = []
+        for index, seg in enumerate(raw_segments):
+            if not isinstance(seg, dict):
+                continue
+            item = {
+                "id": int(seg.get("id", index)),
+                "start": float(seg.get("start") or 0.0),
+                "end": float(seg.get("end") or 0.0),
+                "text": (seg.get("text") or "").strip(),
+            }
+            words = seg.get("words") or []
+            if words:
+                item["words"] = [
+                    {
+                        "word": w.get("word") or w.get("text") or "",
+                        "start": float(w.get("start") or 0.0),
+                        "end": float(w.get("end") or 0.0),
+                    }
+                    for w in words
+                    if isinstance(w, dict)
+                ]
+            segments.append(item)
+        if not segments and text:
+            segments = [{"id": 0, "start": 0.0, "end": float(duration), "text": text}]
+        return {
+            "text": text,
+            "language": language,
+            "duration": float(duration),
+            "segments": segments,
+        }
     
     def _transcribe_short_audio(self, audio_data: np.ndarray) -> str:
         """

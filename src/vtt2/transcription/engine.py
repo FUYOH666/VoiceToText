@@ -64,3 +64,33 @@ class TranscriptionEngineWrapper:
         """
         return self.engine.transcribe(audio_data)
 
+    def transcribe_detailed(
+        self,
+        audio_data: np.ndarray,
+        *,
+        word_timestamps: bool = False,
+    ) -> dict:
+        """Segment-level result for HTTP verbose_json. Text-only engines get one span."""
+        duration = float(len(audio_data) / 16000) if len(audio_data) else 0.0
+        engine = self.engine
+        if hasattr(engine, "transcribe_detailed"):
+            payload = engine.transcribe_detailed(
+                audio_data, word_timestamps=word_timestamps
+            )
+            payload.setdefault("duration", duration)
+            payload.setdefault("segments", [])
+            payload.setdefault("text", "")
+            return payload
+        text = engine.transcribe(audio_data)
+        logger.info("Engine has no transcribe_detailed; one synthetic segment")
+        return {
+            "text": text or "",
+            "language": None,
+            "duration": duration,
+            "segments": (
+                [{"id": 0, "start": 0.0, "end": duration, "text": text}]
+                if text
+                else []
+            ),
+        }
+

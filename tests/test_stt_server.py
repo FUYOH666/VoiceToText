@@ -75,12 +75,35 @@ def _wav_bytes(seconds: float = 0.2, sample_rate: int = 16000) -> bytes:
     return buf.getvalue()
 
 
+def _detailed_payload(
+    text: str = "привет мир",
+    *,
+    language: str = "ru",
+    duration: float = 0.2,
+    segments: list | None = None,
+) -> dict:
+    if segments is None:
+        segments = [{"id": 0, "start": 0.0, "end": duration, "text": text}]
+    return {
+        "text": text,
+        "language": language,
+        "duration": duration,
+        "segments": segments,
+    }
+
+
+def _mock_engine(text: str = "привет мир") -> MagicMock:
+    mock_engine = MagicMock()
+    mock_engine.transcribe.return_value = text
+    mock_engine.transcribe_detailed.return_value = _detailed_payload(text)
+    return mock_engine
+
+
 @pytest.fixture
 def mock_ready_app():
     """App with mocked TranscriptionEngineWrapper that marks ready."""
     config = _minimal_config()
-    mock_engine = MagicMock()
-    mock_engine.transcribe.return_value = "привет мир"
+    mock_engine = _mock_engine("привет мир")
 
     with patch("stt_server.TranscriptionEngineWrapper", return_value=mock_engine):
         with patch("stt_server._warmup", return_value=None):
@@ -111,8 +134,106 @@ class TestSTTServerAPI:
             files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
         )
         assert r.status_code == 200
-        assert r.json()["text"] == "привет мир"
-        mock_engine.transcribe.assert_called()
+        body = r.json()
+        assert body["text"] == "привет мир"
+        assert "segments" not in body
+        mock_engine.transcribe_detailed.assert_called()
+        assert mock_engine.transcribe_detailed.call_args.kwargs["word_timestamps"] is False
+
+    def test_transcriptions_verbose_json_segments(self, mock_ready_app):
+        client, mock_engine = mock_ready_app
+        mock_engine.transcribe_detailed.return_value = _detailed_payload(
+            "раз два",
+            duration=4.2,
+            segments=[
+                {"id": 0, "start": 0.0, "end": 2.0, "text": "раз"},
+                {"id": 1, "start": 2.0, "end": 4.2, "text": "два"},
+            ],
+        )
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={"response_format": "verbose_json"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["task"] == "transcribe"
+        assert body["text"] == "раз два"
+        assert body["duration"] == 4.2
+        assert len(body["segments"]) == 2
+        assert body["segments"][0]["start"] == 0.0
+        assert body["segments"][1]["end"] == 4.2
+
+    def test_transcriptions_text_format(self, mock_ready_app):
+        client, _ = mock_ready_app
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={"response_format": "text"},
+        )
+        assert r.status_code == 200
+        assert r.text == "привет мир"
+        assert "json" not in (r.headers.get("content-type") or "")
+
+    def test_transcriptions_400_bad_format(self, mock_ready_app):
+        client, _ = mock_ready_app
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={"response_format": "srt"},
+        )
+        assert r.status_code == 400
+
+    def test_transcriptions_word_timestamps_flag(self, mock_ready_app):
+        client, mock_engine = mock_ready_app
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={
+                "response_format": "verbose_json",
+                "timestamp_granularities": "word",
+            },
+        )
+        assert r.status_code == 200
+        assert mock_engine.transcribe_detailed.call_args.kwargs["word_timestamps"] is True
+
+    def test_transcriptions_word_timestamps_openai_bracket(self, mock_ready_app):
+        client, mock_engine = mock_ready_app
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={
+                "response_format": "verbose_json",
+                "timestamp_granularities[]": "word",
+            },
+        )
+        assert r.status_code == 200
+        assert mock_engine.transcribe_detailed.call_args.kwargs["word_timestamps"] is True
+
+    def test_transcriptions_strips_last_segment_artifact(self, mock_ready_app):
+        client, mock_engine = mock_ready_app
+        mock_engine.transcribe_detailed.return_value = _detailed_payload(
+            "Диктовка.\nСубтитры добавил DimaTorzok",
+            segments=[
+                {"id": 0, "start": 0.0, "end": 1.0, "text": "Диктовка."},
+                {
+                    "id": 1,
+                    "start": 1.0,
+                    "end": 2.0,
+                    "text": "Субтитры добавил DimaTorzok",
+                },
+            ],
+        )
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={"response_format": "verbose_json"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["text"] == "Диктовка."
+        assert len(body["segments"]) == 1
+        assert body["segments"][0]["text"] == "Диктовка."
 
     def test_transcriptions_413_too_large(self, mock_ready_app):
         client, _ = mock_ready_app
@@ -166,8 +287,7 @@ class TestIdleUnload:
                 "idle_unload_seconds": 900,
             }
         )
-        mock_engine = MagicMock()
-        mock_engine.transcribe.return_value = "ok"
+        mock_engine = _mock_engine("ok")
 
         with patch("stt_server.TranscriptionEngineWrapper", return_value=mock_engine):
             with patch("stt_server._warmup", return_value=None):
@@ -197,8 +317,7 @@ class TestIdleUnload:
                 "idle_unload_seconds": 1,
             }
         )
-        mock_engine = MagicMock()
-        mock_engine.transcribe.return_value = "x"
+        mock_engine = _mock_engine("x")
 
         with patch("stt_server.TranscriptionEngineWrapper", return_value=mock_engine):
             with patch("stt_server._warmup", return_value=None):
@@ -359,7 +478,8 @@ class TestSTTServerConfig:
 
     def test_default_config_yaml_loads(self, project_root):
         cfg = Config.from_yaml(str(project_root / "config.yaml"), project_root)
-        assert cfg.app.version == "1.5.1"
+        assert cfg.app.version == "1.6.0"
+        assert cfg.stt_server.max_upload_mb == 40
         assert cfg.transcription.engine == "local_stt"
         assert cfg.stt_server.port == 8765
         assert cfg.stt_server.host == "127.0.0.1"

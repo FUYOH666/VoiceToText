@@ -137,6 +137,49 @@ class TestMLXWhisperTranscription:
                 assert np.all(normalized_audio <= 1.0)
                 assert normalized_audio.dtype == np.float32
 
+    @patch("mlx_whisper.transcribe")
+    def test_transcribe_detailed_segments_and_words(self, mock_transcribe):
+        from transcription.mlx_engine import MLXWhisperTranscriber
+
+        mock_transcribe.return_value = {
+            "text": "Привет мир",
+            "language": "ru",
+            "segments": [
+                {
+                    "id": 0,
+                    "start": 0.0,
+                    "end": 1.2,
+                    "text": " Привет",
+                    "words": [{"word": " Привет", "start": 0.0, "end": 1.2}],
+                },
+                {"id": 1, "start": 1.2, "end": 2.0, "text": " мир"},
+            ],
+        }
+        mock_config = MagicMock()
+        mock_config.transcription.mlx_whisper.model_name = "mlx-community/whisper-medium"
+        mock_config.transcription.mlx_whisper.language = "ru"
+        mock_config.transcription.mlx_whisper.temperature = 0.0
+        mock_config.transcription.mlx_whisper.beam_size = 5
+        mock_config.transcription.mlx_whisper.best_of = 5
+        mock_config.transcription.mlx_whisper.no_speech_threshold = 0.6
+        mock_config.transcription.mlx_whisper.compression_ratio_threshold = 2.4
+
+        with patch.object(MLXWhisperTranscriber, "_check_dependencies"):
+            with patch.object(MLXWhisperTranscriber, "_check_model_cache"):
+                transcriber = MLXWhisperTranscriber(mock_config)
+                audio_data = np.random.randn(16000).astype(np.float32)
+                result = transcriber.transcribe_detailed(
+                    audio_data, word_timestamps=True
+                )
+
+        assert result["text"] == "Привет мир"
+        assert result["language"] == "ru"
+        assert len(result["segments"]) == 2
+        assert result["segments"][0]["start"] == 0.0
+        assert result["segments"][1]["end"] == 2.0
+        assert result["segments"][0]["words"][0]["word"] == " Привет"
+        assert mock_transcribe.call_args.kwargs["word_timestamps"] is True
+
 
 class TestTranscriptionEngineWrapper:
     """Тесты обертки для движка транскрипции"""
@@ -170,4 +213,22 @@ class TestTranscriptionEngineWrapper:
         
         with pytest.raises(ValueError, match="Неизвестный движок"):
             TranscriptionEngineWrapper(mock_config)
+
+    def test_transcribe_detailed_synthetic_segment(self):
+        from transcription.engine import TranscriptionEngineWrapper
+
+        wrapper = TranscriptionEngineWrapper.__new__(TranscriptionEngineWrapper)
+
+        class Stub:
+            def transcribe(self, audio_data):
+                return "hello"
+
+        wrapper.engine = Stub()
+        audio = np.zeros(16000, dtype=np.float32)
+        payload = wrapper.transcribe_detailed(audio)
+        assert payload["text"] == "hello"
+        assert payload["duration"] == 1.0
+        assert payload["segments"] == [
+            {"id": 0, "start": 0.0, "end": 1.0, "text": "hello"}
+        ]
 
