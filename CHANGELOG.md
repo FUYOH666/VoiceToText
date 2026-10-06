@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.7.0] - 2026-10-06
+
+### Added
+- `POST /v1/audio/transcriptions` applies `language` and `prompt`. Omitted or blank `language` keeps the config code (`ru`). `auto` is autodetect. A canonical code overrides. Full names and other tokens return `400`. `prompt` is Whisper `initial_prompt` (max 1000 characters).
+- Inference log `requested_language` / `effective_language` at the mlx call, so a form-field log is not treated as proof the engine used that language.
+
+### Changed
+- Whisper tail phrases are stripped from every segment, then the top-level `text` is rebuilt. Previously only the last segment was cleaned.
+- Default upload limit is 80 MB and the request timeout is 1200s. 80 MB covers a typical 20-minute 16 kHz mono WAV, not every 20-minute source file.
+
 ## [1.6.0] - 2026-08-16
 
 ### Added

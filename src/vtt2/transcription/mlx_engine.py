@@ -20,6 +20,9 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# Distinguish "caller omitted language" from "caller asked for autodetect" (None).
+_CONFIG_LANGUAGE = object()
+
 # Импорт mlx_whisper (может быть не установлен в тестовой среде)
 try:
     import mlx_whisper as whisper
@@ -152,6 +155,9 @@ class MLXWhisperTranscriber:
         audio_data: np.ndarray,
         *,
         word_timestamps: bool = False,
+        language: object = _CONFIG_LANGUAGE,
+        requested_language: Optional[str] = None,
+        initial_prompt: Optional[str] = None,
     ) -> dict:
         """
         Full native mlx_whisper decode with segment (and optional word) timestamps.
@@ -162,10 +168,26 @@ class MLXWhisperTranscriber:
         """
         start_time = time.time()
         duration = len(audio_data) / float(self.sample_rate)
+        from transcription.request_language import config_language
+
+        if language is _CONFIG_LANGUAGE:
+            effective_language = config_language(self.mlx_config.language)
+            requested_label = requested_language or "omitted"
+        elif language is None or isinstance(language, str):
+            effective_language = language
+            requested_label = requested_language or (
+                "auto" if effective_language is None else effective_language
+            )
+        else:
+            raise TypeError("language must be a code, None, or omitted")
+        prompt = (initial_prompt or "").strip() or None
         logger.info(
-            "MLX detailed transcribe: %.1fs audio word_timestamps=%s",
+            "MLX detailed transcribe: %.1fs audio word_timestamps=%s "
+            "requested_language=%s effective_language=%s",
             duration,
             word_timestamps,
+            requested_label,
+            "None" if effective_language is None else effective_language,
         )
         try:
             if audio_data.dtype != np.float32:
@@ -174,14 +196,11 @@ class MLXWhisperTranscriber:
             if max_val > 1.0:
                 audio_data = audio_data / max_val
 
-            language_param = None
-            if self.mlx_config.language and self.mlx_config.language.lower() != "auto":
-                language_param = self.mlx_config.language
-
             result = whisper.transcribe(
                 audio_data,
                 path_or_hf_repo=self.mlx_config.model_name,
-                language=language_param,
+                language=effective_language,
+                initial_prompt=prompt,
                 temperature=self.mlx_config.temperature,
                 compression_ratio_threshold=self.mlx_config.compression_ratio_threshold,
                 no_speech_threshold=self.mlx_config.no_speech_threshold,

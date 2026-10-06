@@ -137,8 +137,65 @@ class TestSTTServerAPI:
         body = r.json()
         assert body["text"] == "привет мир"
         assert "segments" not in body
-        mock_engine.transcribe_detailed.assert_called()
-        assert mock_engine.transcribe_detailed.call_args.kwargs["word_timestamps"] is False
+        assert "language" not in body
+        kwargs = mock_engine.transcribe_detailed.call_args.kwargs
+        assert kwargs["word_timestamps"] is False
+        assert kwargs["requested_language"] == "omitted"
+        assert kwargs["language"] == "ru"
+        assert kwargs["initial_prompt"] is None
+
+    @pytest.mark.parametrize(
+        ("form_language", "requested", "effective"),
+        [
+            ("   ", "blank", "ru"),
+            ("auto", "auto", None),
+            ("AUTO", "auto", None),
+            ("en", "en", "en"),
+            ("EN", "en", "en"),
+            ("th", "th", "th"),
+        ],
+    )
+    def test_language_override_table(self, mock_ready_app, form_language, requested, effective):
+        client, mock_engine = mock_ready_app
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={"language": form_language},
+        )
+        assert r.status_code == 200
+        kwargs = mock_engine.transcribe_detailed.call_args.kwargs
+        assert kwargs["requested_language"] == requested
+        assert kwargs["language"] == effective
+
+    def test_language_full_name_rejected(self, mock_ready_app):
+        client, mock_engine = mock_ready_app
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={"language": "Thai"},
+        )
+        assert r.status_code == 400
+        mock_engine.transcribe_detailed.assert_not_called()
+
+    def test_prompt_forwarded(self, mock_ready_app):
+        client, mock_engine = mock_ready_app
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={"prompt": "  имена спикеров  "},
+        )
+        assert r.status_code == 200
+        assert mock_engine.transcribe_detailed.call_args.kwargs["initial_prompt"] == "имена спикеров"
+
+    def test_prompt_too_long(self, mock_ready_app):
+        client, mock_engine = mock_ready_app
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={"prompt": "x" * 1001},
+        )
+        assert r.status_code == 400
+        mock_engine.transcribe_detailed.assert_not_called()
 
     def test_transcriptions_verbose_json_segments(self, mock_ready_app):
         client, mock_engine = mock_ready_app
@@ -234,6 +291,27 @@ class TestSTTServerAPI:
         assert body["text"] == "Диктовка."
         assert len(body["segments"]) == 1
         assert body["segments"][0]["text"] == "Диктовка."
+
+    def test_transcriptions_strips_artifact_in_any_segment(self, mock_ready_app):
+        client, mock_engine = mock_ready_app
+        mock_engine.transcribe_detailed.return_value = _detailed_payload(
+            "мусор",
+            segments=[
+                {"id": 0, "start": 0.0, "end": 1.0, "text": "Продолжение следует..."},
+                {"id": 1, "start": 1.0, "end": 2.0, "text": "нормальная фраза"},
+                {"id": 2, "start": 2.0, "end": 3.0, "text": "Продолжение следует"},
+                {"id": 3, "start": 3.0, "end": 4.0, "text": "конец"},
+            ],
+        )
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={"response_format": "verbose_json"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert [s["text"] for s in body["segments"]] == ["нормальная фраза", "конец"]
+        assert body["text"] == "нормальная фраза конец"
 
     def test_transcriptions_413_too_large(self, mock_ready_app):
         client, _ = mock_ready_app
@@ -461,6 +539,24 @@ class TestLocalSTTClient:
                 assert posts["n"] == 2
 
 
+class TestRequestLanguage:
+    def test_truth_table(self):
+        from transcription.request_language import (
+            RejectedLanguage,
+            resolve_request_language,
+        )
+
+        assert resolve_request_language(None, "ru") == ("omitted", "ru")
+        assert resolve_request_language("", "ru") == ("blank", "ru")
+        assert resolve_request_language("  \n", "ru") == ("blank", "ru")
+        assert resolve_request_language("auto", "ru") == ("auto", None)
+        assert resolve_request_language("en", "ru") == ("en", "en")
+        assert resolve_request_language("th", "ru") == ("th", "th")
+        assert resolve_request_language(None, "auto") == ("omitted", None)
+        with pytest.raises(RejectedLanguage):
+            resolve_request_language("Thai", "ru")
+
+
 class TestSTTServerConfig:
     def test_reject_non_loopback_host(self):
         with pytest.raises(Exception):
@@ -478,8 +574,9 @@ class TestSTTServerConfig:
 
     def test_default_config_yaml_loads(self, project_root):
         cfg = Config.from_yaml(str(project_root / "config.yaml"), project_root)
-        assert cfg.app.version == "1.6.0"
-        assert cfg.stt_server.max_upload_mb == 40
+        assert cfg.app.version == "1.7.0"
+        assert cfg.stt_server.max_upload_mb == 80
+        assert cfg.stt_server.request_timeout_seconds == 1200
         assert cfg.transcription.engine == "local_stt"
         assert cfg.stt_server.port == 8765
         assert cfg.stt_server.host == "127.0.0.1"

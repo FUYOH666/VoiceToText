@@ -10,14 +10,14 @@
 # Active daily default is config.yaml (idle_unload). See docs/STT_API.md.
 
 app:
-  version: "1.6.0"
+  version: "1.7.0"
   name: "VTTv2"
 
 stt_server:
   host: "127.0.0.1"
   port: 8765
-  max_upload_mb: 40  # ~10 min 16 kHz mono WAV plus headroom
-  request_timeout_seconds: 600
+  max_upload_mb: 80  # headroom for ~20 min 16 kHz mono 16-bit WAV; not any 20 min source
+  request_timeout_seconds: 1200
   engine: mlx_whisper
   # Always keep weights in GPU/unified memory
   preload_on_start: true

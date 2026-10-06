@@ -69,13 +69,14 @@ class TranscriptionEngineWrapper:
         audio_data: np.ndarray,
         *,
         word_timestamps: bool = False,
+        **kwargs,
     ) -> dict:
         """Segment-level result for HTTP verbose_json. Text-only engines get one span."""
         duration = float(len(audio_data) / 16000) if len(audio_data) else 0.0
         engine = self.engine
         if hasattr(engine, "transcribe_detailed"):
             payload = engine.transcribe_detailed(
-                audio_data, word_timestamps=word_timestamps
+                audio_data, word_timestamps=word_timestamps, **kwargs
             )
             payload.setdefault("duration", duration)
             payload.setdefault("segments", [])

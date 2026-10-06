@@ -11,16 +11,16 @@
 - **Option+Space** — speak, text pastes at the cursor
 - **$0/month** — not SuperWhisper or cloud dictation
 - **Native menu bar app** + one local Whisper process
-- **Same API for agents** — OpenAI-compatible on loopback
+- **Same API for agents** — full transcript with timecodes, language per request, loopback only
 
 ```bash
 curl -fsS http://127.0.0.1:8765/healthz
 curl -fsS -F file=@sample.wav http://127.0.0.1:8765/v1/audio/transcriptions
-curl -fsS -F file=@sample.wav -F response_format=verbose_json \
+curl -fsS -F file=@meeting.wav -F response_format=verbose_json -F language=auto \
   http://127.0.0.1:8765/v1/audio/transcriptions
 ```
 
-Default language is Russian (`mlx_whisper.language: ru`).
+Dictation stays Russian (`mlx_whisper.language: ru`). Agents override the language on a single request.
 
 ---
 
@@ -68,7 +68,7 @@ Or I can deploy, customize, and integrate it for your team in **2 weeks**.
 
 The orange microphone pill is macOS (privacy). The waveform is VoiceToText.
 
-Agents use the same `POST /v1/audio/transcriptions` — [docs/STT_API.md](docs/STT_API.md). For a full transcript with timecodes (up to ~10 minutes), send `response_format=verbose_json`.
+Agents use the same `POST /v1/audio/transcriptions` — [docs/STT_API.md](docs/STT_API.md). `verbose_json` returns the full text plus segment start/end. `language=auto` or a code such as `language=en` applies to that file only.
 
 Default profile loads Whisper on demand and unloads after 15 minutes idle. Always-on: `config.resident.yaml`.
 

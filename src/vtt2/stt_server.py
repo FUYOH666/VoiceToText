@@ -27,8 +27,11 @@ from audio.decode import AudioDecodeError, decode_audio_bytes
 from audio.processor import AudioProcessor
 from config.loader import Config
 from transcription.engine import TranscriptionEngineWrapper
+from transcription.request_language import RejectedLanguage, resolve_request_language
 
 logger = logging.getLogger(__name__)
+
+PROMPT_MAX_CHARS = 1000
 
 
 class STTState:
@@ -75,18 +78,18 @@ def _strip_artifacts(text: str, config: Config) -> str:
 
 
 def _strip_artifacts_payload(payload: dict, config: Config) -> dict:
-    """Strip Whisper tail artifacts on full text and the last segment."""
+    """Strip known Whisper tails on every segment, then rebuild text."""
     segments = list(payload.get("segments") or [])
     if segments:
-        last = dict(segments[-1])
-        last["text"] = _strip_artifacts(last.get("text") or "", config)
-        if last["text"].strip():
-            segments[-1] = last
-        else:
-            segments = segments[:-1]
-        payload["segments"] = segments
+        cleaned = []
+        for seg in segments:
+            item = dict(seg)
+            item["text"] = _strip_artifacts(item.get("text") or "", config)
+            if item["text"].strip():
+                cleaned.append(item)
+        payload["segments"] = cleaned
         payload["text"] = " ".join(
-            (s.get("text") or "").strip() for s in segments if (s.get("text") or "").strip()
+            (s.get("text") or "").strip() for s in cleaned if (s.get("text") or "").strip()
         ).strip()
     else:
         payload["text"] = _strip_artifacts(payload.get("text") or "", config)
@@ -312,6 +315,7 @@ def create_app(config: Config) -> FastAPI:
         model: Optional[str] = Form(None),
         language: Optional[str] = Form(None),
         response_format: str = Form("json"),
+        prompt: Optional[str] = Form(None),
         timestamp_granularities: Optional[str] = Form(None),
         timestamp_granularities_bracket: Optional[str] = Form(
             None, alias="timestamp_granularities[]"
@@ -331,6 +335,24 @@ def create_app(config: Config) -> FastAPI:
         )
 
         cfg = state.config
+        config_lang = None
+        if cfg.transcription.mlx_whisper is not None:
+            config_lang = cfg.transcription.mlx_whisper.language
+        try:
+            requested_label, effective_language = resolve_request_language(
+                language, config_lang
+            )
+        except RejectedLanguage as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+        initial_prompt: Optional[str] = None
+        if prompt is not None and prompt.strip():
+            initial_prompt = prompt.strip()
+            if len(initial_prompt) > PROMPT_MAX_CHARS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"prompt longer than {PROMPT_MAX_CHARS} characters",
+                )
         max_bytes = cfg.stt_server.max_upload_mb * 1024 * 1024
         cl = request.headers.get("content-length")
         if cl is not None:
@@ -351,8 +373,6 @@ def create_app(config: Config) -> FastAPI:
 
         if model:
             logger.info("STT request model=%s (server uses %s)", model, state.model_name)
-        if language:
-            logger.info("STT request language=%s", language)
         if fmt != "json" or want_words:
             logger.info(
                 "STT request response_format=%s timestamp_granularities=%s",
@@ -401,6 +421,9 @@ def create_app(config: Config) -> FastAPI:
                         state.engine.transcribe_detailed,
                         audio,
                         word_timestamps=want_words,
+                        language=effective_language,
+                        requested_language=requested_label,
+                        initial_prompt=initial_prompt,
                     ),
                     timeout=float(cfg.stt_server.request_timeout_seconds),
                 )
@@ -425,20 +448,21 @@ def create_app(config: Config) -> FastAPI:
                 fmt,
             )
             text = payload.get("text") or ""
+            reported_language = payload.get("language") or effective_language
             if fmt == "text":
                 return PlainTextResponse(content=text)
             if fmt == "verbose_json":
                 body = {
                     "task": "transcribe",
-                    "language": payload.get("language") or language or "ru",
+                    "language": reported_language,
                     "duration": payload["duration"],
                     "text": text,
                     "segments": payload.get("segments") or [],
                 }
                 return body
-            body = {"text": text}
-            if language:
-                body["language"] = language
+            body: dict[str, Any] = {"text": text}
+            if requested_label not in ("omitted", "blank") and reported_language:
+                body["language"] = reported_language
             return body
         finally:
             if acquired:
