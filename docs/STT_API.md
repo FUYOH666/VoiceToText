@@ -1,6 +1,6 @@
 # Local STT HTTP API (for agents)
 
-OpenAI-compatible speech-to-text on loopback. **One process owns the Whisper model** (`ai.vtt2.stt`). The menubar app (`ai.vtt2`) and any agent (OpenClaw, scripts, bots) are HTTP clients — they do not load MLX again.
+OpenAI-compatible speech-to-text on loopback. **One process owns the ASR model** (`ai.vtt2.stt`). The default checkpoint is Qwen3-ASR 1.7B 8-bit. The menubar app (`ai.vtt2`) and any agent (OpenClaw, scripts, bots) are HTTP clients — they do not load MLX again.
 
 ## Base URL
 
@@ -14,9 +14,9 @@ Bind is loopback only. No auth on localhost. Do not expose this port to LAN with
 
 | File | Behavior |
 |------|----------|
-| [`config.yaml`](../config.yaml) (**default**) | `preload_on_start: false`, `idle_unload_seconds: 900`, `engine: mlx_whisper`, `mlx_whisper.language: ru` — model loads on first request, unloads after 15 min idle |
-| [`config.resident.yaml`](../config.resident.yaml) | Always-on Whisper snapshot — model stays loaded after warmup (`idle_unload_seconds: 0`) |
-| [`config.qwen.yaml`](../config.qwen.yaml) | Same idle profile, `engine: qwen3_asr`, pre-quantized `moona3k/mlx-qwen3-asr-1.7b-8bit` |
+| [`config.yaml`](../config.yaml) (**default**) | `preload_on_start: false`, `idle_unload_seconds: 900`, `engine: qwen3_asr`, `moona3k/mlx-qwen3-asr-1.7b-8bit`, language `ru` — model loads on first request, unloads after 15 min idle |
+| [`config.resident.yaml`](../config.resident.yaml) | Same Qwen checkpoint, always loaded (`idle_unload_seconds: 0`) |
+| [`config.qwen.yaml`](../config.qwen.yaml) | Clean copy of the idle Qwen default |
 
 Switch to resident:
 
@@ -121,15 +121,14 @@ curl -fsS \
 
 OpenAI-style clients: set base URL to `http://127.0.0.1:8765` and use the audio transcriptions endpoint. Prefer `POST` over assuming `readyz` is always green when using idle-unload. For timestamps, set `response_format="verbose_json"`.
 
-## Optional engine: Qwen3-ASR
+## Default engine: Qwen3-ASR
 
-Default `stt_server.engine` stays `mlx_whisper`. Qwen is the same process, not a second port and not a second model in memory. The menubar still posts the file to `127.0.0.1:8765`. Menu items **Whisper** and **Qwen** change `stt_server.engine` in `config.yaml` (and add a `qwen3_asr` block the first time) and restart only `ai.vtt2.stt`. A click during recording is ignored. If the extra is missing, the file is left as it was.
+Default `stt_server.engine` is `qwen3_asr`. Qwen is the same process, not a second port and not a second model in memory. The menubar still posts the file to `127.0.0.1:8765`. Menu items **Whisper** and **Qwen** change `stt_server.engine` in `config.yaml` (and add a `qwen3_asr` block the first time) and restart only `ai.vtt2.stt`. A click during recording is ignored. If the extra is missing, the file is left as it was and a server started with this default exits instead of falling back to Whisper.
 
-`config.qwen.yaml` sets `engine: qwen3_asr` and `moona3k/mlx-qwen3-asr-1.7b-8bit` with `quantization_bits: null`. That checkpoint is already 8-bit, group 64, for `mlx-qwen3-asr` (about 2 GB). The process loads it as stored and does not quantize again. It is not an `mlx-community` / `mlx-audio` quant. Official float weights remain `Qwen/Qwen3-ASR-1.7B` with `quantization_bits: 8`. On this Mac the first request downloaded that snapshot and answered a 3-second clip in 43 seconds; the same clip with the model already loaded took 0.22 seconds. After idle unload the next request reads the snapshot again.
+`config.yaml` sets `moona3k/mlx-qwen3-asr-1.7b-8bit` with `quantization_bits: null`. That checkpoint is already 8-bit, group 64, for `mlx-qwen3-asr` (about 2 GB). The process loads it as stored and does not quantize again. It is not an `mlx-community` / `mlx-audio` quant. Official float weights remain `Qwen/Qwen3-ASR-1.7B` with `quantization_bits: 8`. On this Mac the first request downloaded that snapshot and answered a 3-second clip in 43 seconds; the same clip with the model already loaded took 0.22 seconds. After idle unload the next request reads the snapshot again.
 
 ```bash
-uv sync --extra dev --extra qwen
-cp config.qwen.yaml config.yaml
+uv sync --extra qwen
 launchctl kickstart -k "gui/$(id -u)/ai.vtt2.stt"
 ```
 
@@ -139,12 +138,7 @@ Until kickstart, the port keeps serving the model already loaded. Omitted or bla
 
 Segment times come from the library's chunks. Word timestamps are requested the same way as for Whisper and load the library's forced aligner for that request only.
 
-Back to Whisper (only if `config.yaml` has no local edits you need):
-
-```bash
-git checkout -- config.yaml
-launchctl kickstart -k "gui/$(id -u)/ai.vtt2.stt"
-```
+Whisper is the menu item. It rewrites `stt_server.engine` to `mlx_whisper` and restarts only `ai.vtt2.stt`. The Whisper block stays in `config.yaml`.
 
 ## Lifecycle
 
@@ -162,7 +156,7 @@ Logs: `~/Library/Logs/vtt2/stt.stdout.log`, `stt.stderr.log`.
 ## Architecture note
 
 ```
-agent / menubar  →  POST 127.0.0.1:8765  →  one model (mlx_whisper by default; optional qwen3_asr)
+agent / menubar  →  POST 127.0.0.1:8765  →  one model (qwen3_asr by default; Whisper from the menu)
 ```
 
 Tail-artifact stripping runs on the server for every segment, then the top-level `text` is rebuilt.

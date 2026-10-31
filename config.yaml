@@ -1,21 +1,21 @@
 # VTTv2 Configuration — profile: idle_unload (default)
 #
-# HTTP process always runs; Whisper weights load on first request and unload
-# after idle_unload_seconds without traffic (frees ~GPU footprint).
-# Always-on snapshot: config.resident.yaml
+# HTTP process always runs. Qwen3-ASR 8-bit loads on the first request and
+# unloads after idle_unload_seconds without traffic.
+# Always-on snapshot of the same checkpoint: config.resident.yaml
 
 app:
   version: "1.7.0"
   name: "VTTv2"
 
-# Локальный STT HTTP (владелец mlx_whisper). Menubar и агенты — клиенты.
+# Локальный STT HTTP (владелец модели). Menubar и агенты — клиенты.
 stt_server:
   host: "127.0.0.1"
   port: 8765
   max_upload_mb: 80  # headroom for ~20 min 16 kHz mono 16-bit WAV; not any 20 min source
   request_timeout_seconds: 1200
-  engine: mlx_whisper  # mlx_whisper | whisper_cpp — что грузит ai.vtt2.stt
-  # Do not load ~20GB GPU footprint at login
+  engine: qwen3_asr  # mlx_whisper | whisper_cpp | qwen3_asr — что грузит ai.vtt2.stt
+  # Do not load the checkpoint at login
   preload_on_start: false
   # Unload model after 15 minutes without requests (0 = never, see config.resident.yaml)
   idle_unload_seconds: 900
@@ -32,6 +32,12 @@ transcription:
     timeout_seconds: 600
     # Wait for on-demand model load (cold start after idle)
     warmup_wait_seconds: 180
+  qwen3_asr:
+    # Pre-quantized 8-bit (group 64) for mlx-qwen3-asr. null: do not quantize again.
+    model_name: "moona3k/mlx-qwen3-asr-1.7b-8bit"
+    quantization_bits: null
+    group_size: 64
+    language: "ru"
   mlx_whisper:
     # Модель MLX (автоматически скачивается при первом использовании)
     # tiny/small/medium/large-v3-mlx — см. README

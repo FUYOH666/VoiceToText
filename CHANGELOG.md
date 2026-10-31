@@ -3,8 +3,11 @@
 ## [Unreleased]
 
 ### Added
-- Optional STT engine `qwen3_asr` via extra `qwen` (`mlx-qwen3-asr`). Default stays `mlx_whisper`. The Qwen profile loads pre-quantized `moona3k/mlx-qwen3-asr-1.7b-8bit` with `quantization_bits: null` (no second quantize pass; not an mlx-community checkpoint). Switch from the menubar (Whisper / Qwen) or by copying `config.qwen.yaml` over `config.yaml`, then the STT process restarts. One model in memory. If the extra is missing, the menu leaves the config alone and startup exits with `uv sync --extra qwen`. There is no fallback to Whisper.
+- Optional STT engine `qwen3_asr` via extra `qwen` (`mlx-qwen3-asr`). The profile loads pre-quantized `moona3k/mlx-qwen3-asr-1.7b-8bit` with `quantization_bits: null` (no second quantize pass; not an mlx-community checkpoint). The menubar items Whisper and Qwen rewrite `stt_server.engine` and restart only the STT process. One model in memory. If the extra is missing, the menu leaves the config alone and startup exits with `uv sync --extra qwen`. There is no fallback to Whisper.
 - Local code signing identity `vtt-local-codesign` (`macos/scripts/setup-local-signing.sh`). `build.sh` uses it when present, so Accessibility and Input Monitoring survive a rebuild. The first rebuild after ad-hoc still needs one grant.
+
+### Changed
+- Default `config.yaml` and `config.resident.yaml` use `qwen3_asr` (`moona3k/mlx-qwen3-asr-1.7b-8bit`). Whisper remains the menu switch. A fresh install needs `uv sync --extra qwen`.
 
 ## [1.7.0] - 2026-10-06
 

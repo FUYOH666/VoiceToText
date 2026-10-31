@@ -196,11 +196,12 @@ class TestQwenProfile:
         assert _profile_language(cfg) == "ru"
         assert _configured_model_name(cfg) == "moona3k/mlx-qwen3-asr-1.7b-8bit"
 
-    def test_default_profile_language_stays_whisper(self, project_root):
+    def test_default_profile_is_qwen(self, project_root):
         cfg = Config.from_yaml(str(project_root / "config.yaml"), project_root)
-        assert cfg.stt_server.engine == "mlx_whisper"
+        assert cfg.stt_server.engine == "qwen3_asr"
+        assert cfg.transcription.engine == "local_stt"
         assert _profile_language(cfg) == "ru"
-        assert _configured_model_name(cfg) == "mlx-community/whisper-large-v3-mlx"
+        assert _configured_model_name(cfg) == "moona3k/mlx-qwen3-asr-1.7b-8bit"
 
     def test_unknown_engine_rejected(self):
         with pytest.raises(Exception):

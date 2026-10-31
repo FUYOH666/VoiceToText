@@ -1,9 +1,9 @@
-# VTTv2 Configuration — profile: qwen3_asr (optional)
+# VTTv2 Configuration — profile: qwen3_asr (idle, same checkpoint as the default)
 #
-# Same STT process and port as the default. One model in memory.
+# config.yaml is already this engine. This file is a clean copy of that idle profile.
 # Enable:  cp config.qwen.yaml config.yaml && launchctl kickstart -k "gui/$(id -u)/ai.vtt2.stt"
-# Revert:  restore config.yaml from git (only if it has no other local edits), then the same kickstart
-# Requires: uv sync --extra dev --extra qwen
+# Whisper: the menubar item, which rewrites stt_server.engine and restarts only STT.
+# Requires: uv sync --extra qwen
 # Checkpoint is already 8-bit (group 64) for mlx-qwen3-asr. quantization_bits stays null
 # so the process does not quantize it again. Not an mlx-community / mlx-audio quant.
 

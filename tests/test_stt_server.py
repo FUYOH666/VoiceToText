@@ -578,15 +578,20 @@ class TestSTTServerConfig:
         assert cfg.stt_server.max_upload_mb == 80
         assert cfg.stt_server.request_timeout_seconds == 1200
         assert cfg.transcription.engine == "local_stt"
-        assert cfg.stt_server.engine == "mlx_whisper"
+        assert cfg.stt_server.engine == "qwen3_asr"
         assert cfg.stt_server.port == 8765
         assert cfg.stt_server.host == "127.0.0.1"
         assert cfg.stt_server.preload_on_start is False
         assert cfg.stt_server.idle_unload_seconds == 900
-        assert cfg.transcription.mlx_whisper.language == "ru"
+        assert cfg.transcription.qwen3_asr is not None
+        assert cfg.transcription.qwen3_asr.model_name == "moona3k/mlx-qwen3-asr-1.7b-8bit"
+        assert cfg.transcription.qwen3_asr.language == "ru"
 
     def test_resident_config_yaml_loads(self, project_root):
         cfg = Config.from_yaml(str(project_root / "config.resident.yaml"), project_root)
         assert cfg.stt_server.preload_on_start is True
         assert cfg.stt_server.idle_unload_seconds == 0
+        assert cfg.stt_server.engine == "qwen3_asr"
+        assert cfg.transcription.qwen3_asr is not None
+        assert cfg.transcription.qwen3_asr.model_name == "moona3k/mlx-qwen3-asr-1.7b-8bit"
         assert cfg.transcription.mlx_whisper.language == "ru"

@@ -10,7 +10,7 @@
 
 - **Option+Space** — speak, text pastes at the cursor
 - **$0/month** — not SuperWhisper or cloud dictation
-- **Native menu bar app** + one local model (Whisper by default; Qwen from the menu)
+- **Native menu bar app** + one local model (Qwen 1.7B 8-bit by default; Whisper from the menu)
 - **Same API for agents** — full transcript with timecodes, language per request, loopback only
 
 ```bash
@@ -20,7 +20,7 @@ curl -fsS -F file=@meeting.wav -F response_format=verbose_json -F language=auto 
   http://127.0.0.1:8765/v1/audio/transcriptions
 ```
 
-Dictation stays Russian (`mlx_whisper.language: ru`). Agents override the language on a single request.
+Dictation stays Russian (`qwen3_asr.language: ru`). Agents override the language on a single request.
 
 ---
 
@@ -31,7 +31,7 @@ Apple Silicon Mac, macOS 13+, [uv](https://docs.astral.sh/uv/).
 ```bash
 git clone https://github.com/FUYOH666/VoiceToText.git
 cd VoiceToText
-uv sync
+uv sync --extra qwen
 macos/scripts/build.sh
 uv run python src/vtt2/main.py --install
 ```
@@ -70,7 +70,7 @@ The orange microphone pill is macOS (privacy). The waveform is VoiceToText.
 
 Agents use the same `POST /v1/audio/transcriptions` — [docs/STT_API.md](docs/STT_API.md). `verbose_json` returns the full text plus segment start/end. `language=auto` or a code such as `language=en` applies to that file only.
 
-Default profile loads Whisper on demand and unloads after 15 minutes idle. Always-on: `config.resident.yaml`.
+Default profile loads Qwen3-ASR 8-bit on demand and unloads after 15 minutes idle. Always-on, same checkpoint: `config.resident.yaml`. Whisper is the menu item, not a second process.
 
 ---
 
@@ -80,30 +80,28 @@ Default profile loads Whisper on demand and unloads after 15 minutes idle. Alway
 stt_server:
   host: "127.0.0.1"
   port: 8765
-  engine: mlx_whisper
+  engine: qwen3_asr
   preload_on_start: false
   idle_unload_seconds: 900
 
 transcription:
   engine: local_stt
-  mlx_whisper:
-    model_name: "mlx-community/whisper-large-v3-mlx"
+  qwen3_asr:
+    model_name: "moona3k/mlx-qwen3-asr-1.7b-8bit"
+    quantization_bits: null
     language: "ru"
 ```
 
-8 GB RAM: use `whisper-medium-mlx`. Optional remote GPU ASR via Tailscale lives under `transcription.engine: remote_asr` (keep the host in gitignored `.env.vtt2`).
-
-Optional Qwen3-ASR-1.7B, same process, one model at a time. The checkpoint is the pre-quantized `moona3k/mlx-qwen3-asr-1.7b-8bit` (8-bit, group 64, about 2 GB). `quantization_bits: null` so it is not quantized again. The menu items **Whisper** and **Qwen** rewrite `stt_server.engine` and restart only the STT process. Default `uv sync` does not install Qwen; the menu then shows `uv sync --extra qwen` and does not change the file. A later plain `uv sync` removes the extra.
+The checkpoint is pre-quantized 8-bit, group 64, about 2 GB. `quantization_bits: null` so it is not quantized again. Install it with the server: `uv sync --extra qwen`. A later plain `uv sync` removes that extra and the default server exits instead of falling back to Whisper.
 
 ```bash
-uv sync --extra dev --extra qwen
-cp config.qwen.yaml config.yaml
+uv sync --extra qwen
 launchctl kickstart -k "gui/$(id -u)/ai.vtt2.stt"
 ```
 
 On this Mac the first request downloaded 2.0 GB and answered a 3-second clip in 43 seconds. The same clip with the model already loaded took 0.22 seconds. After 15 minutes idle the weights unload; the next request loads that snapshot again and does not quantize it.
 
-Back to Whisper: `git checkout -- config.yaml` and the same kickstart. `model=` on the POST does not switch checkpoints. Details: [docs/STT_API.md](docs/STT_API.md).
+Whisper stays in the menu. That item rewrites `stt_server.engine` and restarts only the STT process. On 8 GB RAM the Whisper checkpoint to pick is `whisper-medium-mlx`. Remote GPU ASR stays under `transcription.engine: remote_asr` (host in gitignored `.env.vtt2`). `model=` on the POST does not switch checkpoints. Details: [docs/STT_API.md](docs/STT_API.md).
 
 ---
 

@@ -1,6 +1,6 @@
 # VTTv2 — profile: resident (always-on model)
 #
-# Snapshot of the pre-idle-unload setup: model stays loaded after login/warmup
+# Snapshot of the default Qwen checkpoint: it stays loaded after login
 # until the STT process exits. Use when you want zero cold-start on every dictate.
 #
 # Activate:
@@ -18,8 +18,8 @@ stt_server:
   port: 8765
   max_upload_mb: 80  # headroom for ~20 min 16 kHz mono 16-bit WAV; not any 20 min source
   request_timeout_seconds: 1200
-  engine: mlx_whisper
-  # Always keep weights in GPU/unified memory
+  engine: qwen3_asr  # mlx_whisper | whisper_cpp | qwen3_asr — что грузит ai.vtt2.stt
+  # Always keep weights in memory
   preload_on_start: true
   idle_unload_seconds: 0
 
@@ -30,6 +30,12 @@ transcription:
     path: "/v1/audio/transcriptions"
     timeout_seconds: 600
     warmup_wait_seconds: 180
+  qwen3_asr:
+    # Same checkpoint as the idle default. null: do not quantize again.
+    model_name: "moona3k/mlx-qwen3-asr-1.7b-8bit"
+    quantization_bits: null
+    group_size: 64
+    language: "ru"
   mlx_whisper:
     model_name: "mlx-community/whisper-large-v3-mlx"
     language: "ru"

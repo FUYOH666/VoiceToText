@@ -1,7 +1,7 @@
 """
 Local OpenAI-compatible STT HTTP API.
 
-Owns one ASR model in one process (default mlx_whisper; optional qwen3_asr).
+Owns one ASR model in one process (default qwen3_asr; Whisper is a menu switch).
 Menubar and agents are clients.
 Bind: loopback only. Concurrency: 1.
 
