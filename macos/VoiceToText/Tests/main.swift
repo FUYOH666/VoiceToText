@@ -32,6 +32,126 @@ func runAppConfigTests() {
     expect(wav.count > 44, "wav size")
 }
 
+func runEngineSwitchTests() {
+    let yaml = """
+    stt_server:
+      host: "127.0.0.1"
+      engine: mlx_whisper  # mlx_whisper | whisper_cpp
+    transcription:
+      engine: local_stt
+      local_stt:
+        base_url: "http://127.0.0.1:8765"
+      mlx_whisper:
+        language: "ru"
+    """
+    expect(EngineConfig.read(from: yaml) == .whisper, "read whisper")
+    let qwen: String
+    do {
+        qwen = try EngineConfig.write(.qwen, into: yaml)
+    } catch {
+        expect(false, "write qwen threw \(error)")
+        return
+    }
+    expect(EngineConfig.read(from: qwen) == .qwen, "read qwen")
+    expect(qwen.contains("engine: local_stt"), "menubar engine stays local_stt")
+    expect(qwen.contains("engine: qwen3_asr  # mlx_whisper | whisper_cpp"), "comment kept")
+    expect(qwen.contains("model_name: \"moona3k/mlx-qwen3-asr-1.7b-8bit\""), "qwen model")
+    expect(qwen.contains("quantization_bits: null"), "prequantized, no second pass")
+    expect(qwen.contains("language: \"ru\""), "qwen language ru")
+    let again = (try? EngineConfig.write(.qwen, into: qwen)) ?? ""
+    expect(again == qwen, "qwen block inserted once")
+    let back = (try? EngineConfig.write(.whisper, into: qwen)) ?? ""
+    expect(EngineConfig.read(from: back) == .whisper, "back to whisper")
+    expect(back.contains("qwen3_asr:"), "qwen block kept")
+    expect(back.contains("engine: local_stt"), "local_stt kept on the way back")
+
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let file = dir.appendingPathComponent("config.yaml")
+    try? yaml.write(to: file, atomically: true, encoding: .utf8)
+    let original = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+
+    let missing = EngineController(configURL: file, uvExecutable: "/bin/uv") { _, args, _ in
+        if args.contains("import mlx_qwen3_asr") {
+            return ProcessResult(status: 1, stderr: "missing")
+        }
+        return ProcessResult(status: 0, stderr: "")
+    }
+    do {
+        try missing.select(.qwen)
+        expect(false, "missing extra should throw")
+    } catch let error as EngineSwitchError {
+        expect(error == .qwenExtraMissing, "qwen extra missing")
+    } catch {
+        expect(false, "unexpected \(error)")
+    }
+    let afterMiss = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+    expect(afterMiss == original, "config untouched when extra missing")
+
+    let calls = CallLog()
+    let failedRestart = EngineController(configURL: file, uvExecutable: "/bin/uv") { _, args, _ in
+        calls.add(args.joined(separator: " "))
+        if args.contains("kickstart") {
+            return ProcessResult(status: 1, stderr: "no")
+        }
+        return ProcessResult(status: 0, stderr: "")
+    }
+    do {
+        try failedRestart.select(.qwen)
+        expect(false, "restart failure should throw")
+    } catch let error as EngineSwitchError {
+        expect(error == .restartFailed, "restart failed")
+    } catch {
+        expect(false, "unexpected \(error)")
+    }
+    let reverted = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+    expect(reverted == original, "config reverted after restart failure")
+
+    calls.reset()
+    let ok = EngineController(configURL: file, uvExecutable: "/bin/uv") { _, args, _ in
+        calls.add(args.joined(separator: " "))
+        return ProcessResult(status: 0, stderr: "")
+    }
+    do {
+        try ok.select(.qwen)
+    } catch {
+        expect(false, "successful switch threw \(error)")
+    }
+    let switched = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+    expect(EngineConfig.read(from: switched) == .qwen, "file is qwen")
+    expect(switched.contains("engine: local_stt"), "local_stt after live-shaped switch")
+    expect(calls.values.contains { $0.contains("kickstart") && $0.contains("ai.vtt2.stt") }, "kickstart stt only")
+    do {
+        try ok.select(.qwen)
+    } catch {
+        expect(false, "same engine should be a no-op \(error)")
+    }
+    expect(calls.values.filter { $0.contains("kickstart") }.count == 1, "second click does not restart")
+    try? FileManager.default.removeItem(at: dir)
+
+    let repo = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("config.yaml")
+    if let repoText = try? String(contentsOf: repo, encoding: .utf8), repoText.contains("stt_server:") {
+        expect(repoText.contains("engine: local_stt"), "live menubar engine stays")
+        expect(repoText.contains("mlx-community/whisper-large-v3-mlx"), "whisper checkpoint kept")
+        if EngineConfig.read(from: repoText) == .whisper,
+           let edited = try? EngineConfig.write(.qwen, into: repoText) {
+            expect(EngineConfig.read(from: edited) == .qwen, "live yaml would switch")
+            expect(edited.contains("moona3k/mlx-qwen3-asr-1.7b-8bit"), "live insert uses prequant")
+            expect(edited.contains("quantization_bits: null"), "live insert does not requantize")
+            let qwenKeys = edited.components(separatedBy: "qwen3_asr:").count - 1
+            expect(qwenKeys == 1, "one qwen block, got \(qwenKeys)")
+        }
+    }
+}
+
+private final class CallLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [String] = []
+    func add(_ item: String) { lock.withLock { items.append(item) } }
+    func reset() { lock.withLock { items.removeAll() } }
+    var values: [String] { lock.withLock { items } }
+}
+
 func runSTTClientTests() async {
     MockURLProtocol.reset()
     MockURLProtocol.handler = { request in
@@ -119,6 +239,7 @@ func makeClient() -> STTClient {
 }
 
 runAppConfigTests()
+runEngineSwitchTests()
 let sem = DispatchSemaphore(value: 0)
 Task {
     await runSTTClientTests()

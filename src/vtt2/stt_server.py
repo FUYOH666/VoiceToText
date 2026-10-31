@@ -1,7 +1,8 @@
 """
 Local OpenAI-compatible STT HTTP API.
 
-Owns mlx_whisper (or whisper_cpp) in one process. Menubar and agents are clients.
+Owns one ASR model in one process (default mlx_whisper; optional qwen3_asr).
+Menubar and agents are clients.
 Bind: loopback only. Concurrency: 1.
 
 Profiles:
@@ -126,15 +127,30 @@ def _release_mlx_cache() -> None:
         logger.debug("STT: mlx clear_cache skipped: %s", e)
 
 
+def _configured_model_name(config: Config) -> str:
+    """Checkpoint id the process will load. HTTP ``model=`` does not change this."""
+    if config.stt_server.engine == "qwen3_asr" and config.transcription.qwen3_asr:
+        return config.transcription.qwen3_asr.model_name
+    if config.transcription.mlx_whisper:
+        return config.transcription.mlx_whisper.model_name
+    return config.stt_server.engine
+
+
+def _profile_language(config: Config) -> Optional[str]:
+    """Language used when the request omits the field. Depends on the loaded engine."""
+    if config.stt_server.engine == "qwen3_asr" and config.transcription.qwen3_asr:
+        return config.transcription.qwen3_asr.language
+    if config.transcription.mlx_whisper is not None:
+        return config.transcription.mlx_whisper.language
+    return None
+
+
 def _load_model_sync(config: Config) -> None:
     """Load engine + warmup (blocking; call via to_thread)."""
     eng_config = _server_engine_config(config)
     engine = TranscriptionEngineWrapper(eng_config)
     processor = AudioProcessor()
-    if eng_config.transcription.mlx_whisper:
-        state.model_name = eng_config.transcription.mlx_whisper.model_name
-    else:
-        state.model_name = config.stt_server.engine
+    state.model_name = _configured_model_name(config)
     _warmup(engine, eng_config.audio.sample_rate)
     state.engine = engine
     state.processor = processor
@@ -147,8 +163,16 @@ def _load_model_sync(config: Config) -> None:
 def _unload_model_sync() -> None:
     """Drop engine references and ask MLX to free GPU cache."""
     state.ready = False
+    engine = state.engine
     state.engine = None
     state.processor = None
+    inner = getattr(engine, "engine", None)
+    release = getattr(inner, "release", None)
+    if callable(release):
+        try:
+            release()
+        except Exception:
+            logger.exception("STT engine release failed")
     _release_mlx_cache()
     logger.info("STT model unloaded (idle)")
 
@@ -234,12 +258,7 @@ def create_app(config: Config) -> FastAPI:
             server_cfg.preload_on_start,
             server_cfg.idle_unload_seconds,
         )
-        if eng_name := (
-            config.transcription.mlx_whisper.model_name
-            if config.transcription.mlx_whisper
-            else server_cfg.engine
-        ):
-            state.model_name = eng_name
+        state.model_name = _configured_model_name(config)
 
         if server_cfg.preload_on_start:
             try:
@@ -335,9 +354,7 @@ def create_app(config: Config) -> FastAPI:
         )
 
         cfg = state.config
-        config_lang = None
-        if cfg.transcription.mlx_whisper is not None:
-            config_lang = cfg.transcription.mlx_whisper.language
+        config_lang = _profile_language(cfg)
         try:
             requested_label, effective_language = resolve_request_language(
                 language, config_lang
@@ -479,6 +496,13 @@ def run_server(config: Config) -> None:
             f"Refusing to bind non-loopback host: {host}. "
             "Set stt_server.host to 127.0.0.1"
         )
+    if config.stt_server.engine == "qwen3_asr":
+        from transcription.qwen_engine import ensure_qwen_installed
+
+        try:
+            ensure_qwen_installed()
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
     port = config.stt_server.port
     app = create_app(config)
     logger.info("Listening on http://%s:%s", host, port)

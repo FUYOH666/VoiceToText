@@ -38,6 +38,10 @@ class TranscriptionEngineWrapper:
             from .mlx_engine import MLXWhisperTranscriber
             self.engine = MLXWhisperTranscriber(config)
             logger.info("Используется движок: MLX Whisper (Apple Silicon)")
+        elif engine_type == "qwen3_asr":
+            from .qwen_engine import Qwen3ASRTranscriber
+            self.engine = Qwen3ASRTranscriber(config)
+            logger.info("Используется движок: Qwen3-ASR")
         elif engine_type == "remote_asr":
             from .remote_asr import RemoteASRTranscriber
             self.engine = RemoteASRTranscriber(config)

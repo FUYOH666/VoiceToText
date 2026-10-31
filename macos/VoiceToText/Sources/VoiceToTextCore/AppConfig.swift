@@ -49,12 +49,25 @@ public struct AppConfig: Sendable, Equatable {
 
     /// Search env `VTT2_CONFIG`, then walk up from `start` / cwd for `config.yaml`.
     public static func load(searchingFrom start: URL? = nil) -> AppConfig {
+        guard let url = locateConfigFile(searchingFrom: start),
+              let text = try? String(contentsOf: url, encoding: .utf8)
+        else {
+            AppLog.info("config.yaml not found; using loopback default")
+            return loopbackDefault
+        }
+        if ProcessInfo.processInfo.environment["VTT2_CONFIG"] == url.path {
+            AppLog.info("config from VTT2_CONFIG")
+        } else {
+            AppLog.info("config from \(url.path)")
+        }
+        return parseYAML(text)
+    }
+
+    /// Same search as `load`. The menu edits this file; the STT process reads it.
+    public static func locateConfigFile(searchingFrom start: URL? = nil) -> URL? {
         if let env = ProcessInfo.processInfo.environment["VTT2_CONFIG"], !env.isEmpty {
             let url = URL(fileURLWithPath: env)
-            if let text = try? String(contentsOf: url, encoding: .utf8) {
-                AppLog.info("config from VTT2_CONFIG")
-                return parseYAML(text)
-            }
+            if FileManager.default.isReadableFile(atPath: url.path) { return url }
         }
 
         var directories: [URL] = []
@@ -71,20 +84,15 @@ public struct AppConfig: Sendable, Equatable {
             var dir = root
             for _ in 0..<6 {
                 let candidate = dir.appendingPathComponent("config.yaml")
-                if FileManager.default.isReadableFile(atPath: candidate.path),
-                   let text = try? String(contentsOf: candidate, encoding: .utf8)
-                {
-                    AppLog.info("config from \(candidate.path)")
-                    return parseYAML(text)
+                if FileManager.default.isReadableFile(atPath: candidate.path) {
+                    return candidate
                 }
                 let parent = dir.deletingLastPathComponent()
                 if parent.path == dir.path { break }
                 dir = parent
             }
         }
-
-        AppLog.info("config.yaml not found; using loopback default")
-        return loopbackDefault
+        return nil
     }
 
     private static func extractLocalSTTBlock(from text: String) -> String? {

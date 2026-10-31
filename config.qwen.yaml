@@ -1,0 +1,119 @@
+# VTTv2 Configuration — profile: qwen3_asr (optional)
+#
+# Same STT process and port as the default. One model in memory.
+# Enable:  cp config.qwen.yaml config.yaml && launchctl kickstart -k "gui/$(id -u)/ai.vtt2.stt"
+# Revert:  restore config.yaml from git (only if it has no other local edits), then the same kickstart
+# Requires: uv sync --extra dev --extra qwen
+# Checkpoint is already 8-bit (group 64) for mlx-qwen3-asr. quantization_bits stays null
+# so the process does not quantize it again. Not an mlx-community / mlx-audio quant.
+
+app:
+  version: "1.7.0"
+  name: "VTTv2"
+
+# Локальный STT HTTP. Этот профиль грузит Qwen3-ASR. Menubar по-прежнему клиент.
+stt_server:
+  host: "127.0.0.1"
+  port: 8765
+  max_upload_mb: 80  # headroom for ~20 min 16 kHz mono 16-bit WAV; not any 20 min source
+  request_timeout_seconds: 1200
+  engine: qwen3_asr  # mlx_whisper | whisper_cpp | qwen3_asr — что грузит ai.vtt2.stt
+  # Do not load the model at login
+  preload_on_start: false
+  # Unload model after 15 minutes without requests (0 = never, see config.resident.yaml)
+  idle_unload_seconds: 900
+
+# ⭐ Движок транскрипции (menubar)
+transcription:
+  # local_stt — HTTP к ai.vtt2.stt (одна модель)
+  # mlx_whisper / whisper_cpp — in-process (не смешивать с STT)
+  # remote_asr — удалённый GPU ASR
+  engine: local_stt  # local_stt | mlx_whisper | whisper_cpp | remote_asr
+  local_stt:
+    base_url: "http://127.0.0.1:8765"
+    path: "/v1/audio/transcriptions"
+    timeout_seconds: 600
+    # Wait for on-demand model load (cold start after idle)
+    warmup_wait_seconds: 180
+  qwen3_asr:
+    # Pre-quantized 8-bit (group 64) for this runtime. null: do not quantize again.
+    # Official float weights would be Qwen/Qwen3-ASR-1.7B with quantization_bits: 8.
+    model_name: "moona3k/mlx-qwen3-asr-1.7b-8bit"
+    quantization_bits: null
+    group_size: 64
+    # Omitted or blank request language uses this. auto is library autodetect.
+    language: "ru"
+  mlx_whisper:
+    # Kept so a switch back to mlx_whisper still has a checkpoint. Not loaded in this profile.
+    model_name: "mlx-community/whisper-large-v3-mlx"
+    language: "ru"  # "ru" | "en" | "auto" | …  (auto on long RU takes can yield nn / empty)
+    temperature: 0.0
+    beam_size: 5
+    best_of: 5
+    no_speech_threshold: 0.6
+    compression_ratio_threshold: 2.4
+    chunk_size_seconds: 30
+    chunk_overlap_seconds: 2
+    # Slightly lower peak GPU buffers vs resident profile (was 6)
+    batch_size: 4
+  whisper_cpp:
+    binary_path: "./whisper.cpp/build/bin/whisper-cli"
+    model_path: "./models/ggml-medium-q5_0.bin"
+    use_coreml: false
+    use_metal: true
+    threads: 4
+    language: "ru"
+    temperature: 0.0
+    beam_size: 5
+    best_of: 5
+    patience: 1.0
+    no_speech_threshold: 0.6
+    compression_ratio_threshold: 2.4
+  remote_asr:
+    host: "YOUR_TAILSCALE_IP"
+    port: 8001
+    path: "/v1/audio/transcriptions"
+    model: "cstr/whisper-large-v3-turbo-int8_float32"
+    timeout_seconds: 60
+
+# Аудио
+audio:
+  sample_rate: 16000
+  channels: 1
+  device_index: null
+  chunk_size: 1024
+  max_recording_duration: 7200
+
+# UI и управление
+ui:
+  auto_paste_enabled: true
+  auto_paste_method: cgevent
+  hotkey: "option+space"
+
+menu_bar:
+  icon_idle: "🎤"
+  icon_recording: "🔴"
+  show_status: true
+
+# Постобработка текста
+text_processing:
+  enabled: false
+  strip_whisper_tail_artifacts: true
+  whisper_artifact_languages:
+    - ru
+    - en
+
+# Производительность (menubar process — not STT GPU weights)
+performance:
+  use_neural_engine: true
+  max_concurrent_tasks: 1
+  memory_limit_mb: 16384
+  auto_cleanup_enabled: true
+  cleanup_threshold_percent: 75
+  periodic_cleanup_interval: 10
+
+# Логирование
+logging:
+  level: INFO
+  format: "%(asctime)s %(levelname)s %(name)s %(message)s"
+  file: null

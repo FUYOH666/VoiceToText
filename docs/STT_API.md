@@ -14,8 +14,9 @@ Bind is loopback only. No auth on localhost. Do not expose this port to LAN with
 
 | File | Behavior |
 |------|----------|
-| [`config.yaml`](../config.yaml) (**default**) | `preload_on_start: false`, `idle_unload_seconds: 900`, `mlx_whisper.language: ru` — model loads on first request, unloads after 15 min idle |
-| [`config.resident.yaml`](../config.resident.yaml) | Always-on snapshot — model stays loaded after warmup (`idle_unload_seconds: 0`) |
+| [`config.yaml`](../config.yaml) (**default**) | `preload_on_start: false`, `idle_unload_seconds: 900`, `engine: mlx_whisper`, `mlx_whisper.language: ru` — model loads on first request, unloads after 15 min idle |
+| [`config.resident.yaml`](../config.resident.yaml) | Always-on Whisper snapshot — model stays loaded after warmup (`idle_unload_seconds: 0`) |
+| [`config.qwen.yaml`](../config.qwen.yaml) | Same idle profile, `engine: qwen3_asr`, pre-quantized `moona3k/mlx-qwen3-asr-1.7b-8bit` |
 
 Switch to resident:
 
@@ -47,9 +48,9 @@ Same URL for menubar and agents. Default response stays `{"text":"…"}` so exis
 Multipart form:
 
 - `file` (required) — audio (`wav`, `flac`, …; `ogg`/`webm`/`m4a` via `ffmpeg` if installed)
-- `language` (optional) — canonical code (`en`, `ru`, `th`, …) or `auto`. Omitted or blank keeps `mlx_whisper.language` from config (default `ru`). `auto` lets Whisper choose from the first ≤30 seconds. One language token for the whole file. An explicit code such as `en` fixes that token and decodes in that language mode; it is the wrong mode for stable mixed-language speech (the model can still occasionally emit another language or code-switch). Full names (`Thai`) are `400` — this API does not accept them, even though mlx-whisper can map some names itself.
+- `language` (optional) — canonical code (`en`, `ru`, `th`, …) or `auto`. Omitted or blank keeps the active profile language (`mlx_whisper.language`, or `qwen3_asr.language` when that engine is selected; default `ru`). `auto` is autodetect. On Whisper that choice is made from the first ≤30 seconds and one language token covers the whole file. An explicit code such as `en` fixes that token and decodes in that language mode; it is the wrong mode for stable mixed-language speech (the model can still occasionally emit another language or code-switch). Full names (`Thai`) are `400`.
 - `prompt` (optional) — passed to Whisper as `initial_prompt` (max 1000 characters)
-- `model` (optional) — logged; server uses `config.yaml` model
+- `model` (optional) — logged; server uses the checkpoint in `config.yaml`. It does not switch models on the fly
 - `response_format` (optional) — `json` (default), `verbose_json`, `text`
 - `timestamp_granularities` / `timestamp_granularities[]` (optional) — include `word` for word-level timings (only in `verbose_json`)
 
@@ -120,6 +121,31 @@ curl -fsS \
 
 OpenAI-style clients: set base URL to `http://127.0.0.1:8765` and use the audio transcriptions endpoint. Prefer `POST` over assuming `readyz` is always green when using idle-unload. For timestamps, set `response_format="verbose_json"`.
 
+## Optional engine: Qwen3-ASR
+
+Default `stt_server.engine` stays `mlx_whisper`. Qwen is the same process, not a second port and not a second model in memory. The menubar still posts the file to `127.0.0.1:8765`. Menu items **Whisper** and **Qwen** change `stt_server.engine` in `config.yaml` (and add a `qwen3_asr` block the first time) and restart only `ai.vtt2.stt`. A click during recording is ignored. If the extra is missing, the file is left as it was.
+
+`config.qwen.yaml` sets `engine: qwen3_asr` and `moona3k/mlx-qwen3-asr-1.7b-8bit` with `quantization_bits: null`. That checkpoint is already 8-bit, group 64, for `mlx-qwen3-asr` (about 2 GB). The process loads it as stored and does not quantize again. It is not an `mlx-community` / `mlx-audio` quant. Official float weights remain `Qwen/Qwen3-ASR-1.7B` with `quantization_bits: 8`. On this Mac the first request downloaded that snapshot and answered a 3-second clip in 43 seconds; the same clip with the model already loaded took 0.22 seconds. After idle unload the next request reads the snapshot again.
+
+```bash
+uv sync --extra dev --extra qwen
+cp config.qwen.yaml config.yaml
+launchctl kickstart -k "gui/$(id -u)/ai.vtt2.stt"
+```
+
+Ordinary `uv sync` does not install the extra. If the config selects Qwen and the extra is missing, the process exits with `uv sync --extra qwen`. It does not fall back to Whisper.
+
+Until kickstart, the port keeps serving the model already loaded. Omitted or blank `language` still uses the profile language (`qwen3_asr.language`, default `ru`). `language=auto` is library autodetect. A canonical code is passed through; names such as `Thai` stay `400`.
+
+Segment times come from the library's chunks. Word timestamps are requested the same way as for Whisper and load the library's forced aligner for that request only.
+
+Back to Whisper (only if `config.yaml` has no local edits you need):
+
+```bash
+git checkout -- config.yaml
+launchctl kickstart -k "gui/$(id -u)/ai.vtt2.stt"
+```
+
 ## Lifecycle
 
 ```bash
@@ -136,7 +162,7 @@ Logs: `~/Library/Logs/vtt2/stt.stdout.log`, `stt.stderr.log`.
 ## Architecture note
 
 ```
-agent / menubar  →  POST 127.0.0.1:8765  →  mlx_whisper (load ↔ idle unload)
+agent / menubar  →  POST 127.0.0.1:8765  →  one model (mlx_whisper by default; optional qwen3_asr)
 ```
 
-Whisper tail-artifact stripping runs on the server so all clients get the same text (last segment, then rejoined `text`).
+Tail-artifact stripping runs on the server for every segment, then the top-level `text` is rebuilt.

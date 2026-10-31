@@ -6,7 +6,12 @@ struct VoiceToTextApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            Text("Статус: \(state.status)")
+            Text("Статус: \(state.statusLine)")
+            Divider()
+            Button(state.engineButtonTitle(.whisper)) { state.selectEngine(.whisper) }
+                .disabled(state.isSwitching)
+            Button(state.engineButtonTitle(.qwen)) { state.selectEngine(.qwen) }
+                .disabled(state.isSwitching)
             Divider()
             Button("Начать / остановить запись") { state.toggle() }
             Divider()

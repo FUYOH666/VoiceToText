@@ -578,6 +578,7 @@ class TestSTTServerConfig:
         assert cfg.stt_server.max_upload_mb == 80
         assert cfg.stt_server.request_timeout_seconds == 1200
         assert cfg.transcription.engine == "local_stt"
+        assert cfg.stt_server.engine == "mlx_whisper"
         assert cfg.stt_server.port == 8765
         assert cfg.stt_server.host == "127.0.0.1"
         assert cfg.stt_server.preload_on_start is False

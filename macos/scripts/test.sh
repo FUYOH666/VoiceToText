@@ -11,6 +11,7 @@ swiftc \
   -o "$OUT" \
   "$PKG/Sources/VoiceToTextCore/AppLog.swift" \
   "$PKG/Sources/VoiceToTextCore/AppConfig.swift" \
+  "$PKG/Sources/VoiceToTextCore/EngineSwitch.swift" \
   "$PKG/Sources/VoiceToTextCore/STTClient.swift" \
   "$PKG/Sources/VoiceToTextCore/WAVEncoder.swift" \
   "$PKG/Tests/VoiceToTextCoreTests/MockURLProtocol.swift" \

@@ -67,6 +67,24 @@ class LocalSTTConfig(BaseModel):
     )
 
 
+class Qwen3ASRConfig(BaseModel):
+    """Опциональный Qwen3-ASR в том же STT-процессе. Пакет — extra ``qwen``."""
+
+    model_name: str = Field(
+        "moona3k/mlx-qwen3-asr-1.7b-8bit",
+        description="Готовый 8-bit чекпоинт mlx-qwen3-asr. Не mlx-community и не mlx-audio",
+    )
+    quantization_bits: Optional[Literal[4, 8]] = Field(
+        None,
+        description="null: грузить чекпоинт как он сохранён. 4 или 8: квант в памяти после загрузки float-весов",
+    )
+    group_size: Literal[32, 64, 128] = Field(64, description="Группа квантования MLX")
+    language: Optional[str] = Field(
+        "ru",
+        description="Если language в запросе пустое: код или auto",
+    )
+
+
 class STTServerConfig(BaseModel):
     """Локальный OpenAI-compatible STT HTTP сервер (владелец модели)"""
     host: str = Field("127.0.0.1", description="Bind host (только loopback)")
@@ -75,7 +93,7 @@ class STTServerConfig(BaseModel):
     request_timeout_seconds: int = Field(
         1200, ge=30, le=3600, description="Таймаут обработки одного запроса"
     )
-    engine: Literal["mlx_whisper", "whisper_cpp"] = Field(
+    engine: Literal["mlx_whisper", "whisper_cpp", "qwen3_asr"] = Field(
         "mlx_whisper",
         description="Движок, который грузит STT-сервер (не local_stt/remote_asr)",
     )
@@ -109,11 +127,12 @@ class WhisperCppConfig(BaseModel):
 
 class TranscriptionConfig(BaseModel):
     """Конфигурация транскрипции"""
-    engine: Literal["whisper_cpp", "mlx_whisper", "remote_asr", "local_stt"] = Field(
-        "local_stt", description="Движок транскрипции (menubar: local_stt → HTTP)"
-    )
+    engine: Literal[
+        "whisper_cpp", "mlx_whisper", "remote_asr", "local_stt", "qwen3_asr"
+    ] = Field("local_stt", description="Движок транскрипции (menubar: local_stt → HTTP)")
     whisper_cpp: Optional[WhisperCppConfig] = Field(None, description="Настройки whisper.cpp")
     mlx_whisper: Optional[MLXWhisperConfig] = Field(None, description="Настройки MLX Whisper")
+    qwen3_asr: Optional[Qwen3ASRConfig] = Field(None, description="Настройки Qwen3-ASR")
     remote_asr: Optional[RemoteASRConfig] = Field(None, description="Настройки удалённого ASR")
     local_stt: Optional[LocalSTTConfig] = Field(None, description="Клиент локального STT HTTP")
 
@@ -124,6 +143,8 @@ class TranscriptionConfig(BaseModel):
             raise ValueError("whisper_cpp движок требует whisper_cpp конфигурацию")
         if self.engine == "mlx_whisper" and not self.mlx_whisper:
             self.mlx_whisper = MLXWhisperConfig()
+        if self.engine == "qwen3_asr" and not self.qwen3_asr:
+            self.qwen3_asr = Qwen3ASRConfig()
         if self.engine == "remote_asr" and not self.remote_asr:
             self.remote_asr = RemoteASRConfig()
         if self.engine == "local_stt" and not self.local_stt:

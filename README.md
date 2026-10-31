@@ -10,7 +10,7 @@
 
 - **Option+Space** — speak, text pastes at the cursor
 - **$0/month** — not SuperWhisper or cloud dictation
-- **Native menu bar app** + one local Whisper process
+- **Native menu bar app** + one local model (Whisper by default; Qwen from the menu)
 - **Same API for agents** — full transcript with timecodes, language per request, loopback only
 
 ```bash
@@ -93,11 +93,25 @@ transcription:
 
 8 GB RAM: use `whisper-medium-mlx`. Optional remote GPU ASR via Tailscale lives under `transcription.engine: remote_asr` (keep the host in gitignored `.env.vtt2`).
 
+Optional Qwen3-ASR-1.7B, same process, one model at a time. The checkpoint is the pre-quantized `moona3k/mlx-qwen3-asr-1.7b-8bit` (8-bit, group 64, about 2 GB). `quantization_bits: null` so it is not quantized again. The menu items **Whisper** and **Qwen** rewrite `stt_server.engine` and restart only the STT process. Default `uv sync` does not install Qwen; the menu then shows `uv sync --extra qwen` and does not change the file. A later plain `uv sync` removes the extra.
+
+```bash
+uv sync --extra dev --extra qwen
+cp config.qwen.yaml config.yaml
+launchctl kickstart -k "gui/$(id -u)/ai.vtt2.stt"
+```
+
+On this Mac the first request downloaded 2.0 GB and answered a 3-second clip in 43 seconds. The same clip with the model already loaded took 0.22 seconds. After 15 minutes idle the weights unload; the next request loads that snapshot again and does not quantize it.
+
+Back to Whisper: `git checkout -- config.yaml` and the same kickstart. `model=` on the POST does not switch checkpoints. Details: [docs/STT_API.md](docs/STT_API.md).
+
 ---
 
 ## Troubleshooting
 
-**Paste does nothing:** Privacy → Accessibility and Input Monitoring → **VoiceToText**. After rebuild, delete the stale row and add the current `.app`. Text is also on the clipboard (Cmd+V). Menu: «Разрешения…».
+**Paste does nothing:** Privacy → Accessibility and Input Monitoring → **VoiceToText**. Text is also on the clipboard (Cmd+V). Menu: «Разрешения…».
+
+Daily builds sign with the login-keychain identity `vtt-local-codesign`, so those two grants survive the next rebuild. Create it once: `macos/scripts/setup-local-signing.sh`. The first rebuild after an ad-hoc signature still needs one grant. Without that identity, `build.sh` signs ad-hoc and macOS drops the grants every time.
 
 **STT slow / `readyz` 503:** idle-unload. `healthz` is enough; the next POST loads the model. Always-on: `cp config.resident.yaml config.yaml && uv run python src/vtt2/main.py --install`.
 

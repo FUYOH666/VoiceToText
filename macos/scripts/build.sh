@@ -16,6 +16,7 @@ swiftc -parse-as-library \
   -o "$BIN" \
   "$PKG/Sources/VoiceToTextCore/AppLog.swift" \
   "$PKG/Sources/VoiceToTextCore/AppConfig.swift" \
+  "$PKG/Sources/VoiceToTextCore/EngineSwitch.swift" \
   "$PKG/Sources/VoiceToTextCore/STTClient.swift" \
   "$PKG/Sources/VoiceToTextCore/WAVEncoder.swift" \
   "$PKG/Sources/VoiceToText/HotkeyController.swift" \
@@ -39,10 +40,18 @@ if [[ -f "$PKG/Resources/icon.png" ]]; then
   cp "$PKG/Resources/icon.png" "$DIST/Contents/Resources/icon.png"
 fi
 
-# Ad-hoc sign for local daily driver (no hardened runtime — that is release.sh).
-if command -v codesign >/dev/null; then
-  codesign --force --sign - --entitlements "$PKG/Resources/VoiceToText.entitlements" "$DIST" \
-    || true
+# Stable local identity keeps the designated requirement across rebuilds, so
+# Accessibility and Input Monitoring survive. Ad-hoc (`-`) changes cdhash every
+# build and macOS drops those grants. No hardened runtime here — that is release.sh.
+LOCAL_SIGN_IDENTITY="${VTT2_LOCAL_SIGN_IDENTITY:-vtt-local-codesign}"
+SIGN_ID="-"
+if security find-identity -v -p codesigning 2>/dev/null | grep -F "\"${LOCAL_SIGN_IDENTITY}\"" >/dev/null; then
+  SIGN_ID="$LOCAL_SIGN_IDENTITY"
+else
+  echo "No stable identity '${LOCAL_SIGN_IDENTITY}'. Signing ad-hoc; paste permission resets on every rebuild." >&2
+  echo "Run once: macos/scripts/setup-local-signing.sh" >&2
 fi
+codesign --force --sign "$SIGN_ID" --entitlements "$PKG/Resources/VoiceToText.entitlements" "$DIST"
+codesign --verify --verbose=2 "$DIST"
 
 echo "Built $DIST"

@@ -11,15 +11,43 @@ final class AppState: ObservableObject {
     @Published var menuSymbol: String = "waveform"
     @Published var status: String = "Готов"
     @Published var lastText: String = ""
+    @Published var engine: STTEngineChoice?
+    @Published var isSwitching = false
+
+    var statusLine: String {
+        if status == "Готов" || status == "Нет микрофона", let title = engine?.title {
+            return "\(status) · \(title)"
+        }
+        return status
+    }
+
+    func engineButtonTitle(_ choice: STTEngineChoice) -> String {
+        engine == choice ? "✓ \(choice.title)" : choice.title
+    }
 
     private let recorder = Recorder()
     private let hotkey = HotkeyController()
     private let client: STTClient
+    private let engineController: EngineController?
     private var isRecording = false
     private var isProcessing = false
 
     init(config: AppConfig = AppConfig.load()) {
         client = STTClient(config: config)
+        if let url = AppConfig.locateConfigFile() {
+            engineController = EngineController(
+                configURL: url,
+                uvExecutable: EngineProcesses.uvExecutable(),
+                run: { executable, arguments, cwd in
+                    EngineProcesses.run(executable: executable, arguments: arguments, cwd: cwd)
+                }
+            )
+            if let text = try? String(contentsOf: url, encoding: .utf8) {
+                engine = EngineConfig.read(from: text)
+            }
+        } else {
+            engineController = nil
+        }
         hotkey.onPressed = { [weak self] in
             Task { @MainActor in
                 self?.toggle()
@@ -38,6 +66,41 @@ final class AppState: ObservableObject {
             stopAndTranscribe()
         } else {
             startRecording()
+        }
+    }
+
+    func selectEngine(_ target: STTEngineChoice) {
+        if isSwitching { return }
+        if isRecording || isProcessing {
+            presentAlert(title: "Движок", message: "Сначала остановите запись.")
+            return
+        }
+        if engine == target { return }
+        guard let engineController else {
+            presentAlert(title: "Движок", message: EngineSwitchError.configNotFound.message)
+            return
+        }
+        isSwitching = true
+        let previous = status
+        status = "Переключение…"
+        Task {
+            do {
+                try await Task.detached {
+                    try engineController.select(target)
+                }.value
+                engine = target
+                status = previous == "Нет микрофона" ? previous : "Готов"
+                AppLog.info("STT engine switched to \(target.rawValue)")
+            } catch let error as EngineSwitchError {
+                status = previous == "Переключение…" ? "Готов" : previous
+                AppLog.error("engine switch failed: \(error.message)")
+                presentAlert(title: "Движок", message: error.message)
+            } catch {
+                status = previous == "Переключение…" ? "Готов" : previous
+                AppLog.error("engine switch failed")
+                presentAlert(title: "Движок", message: "Не удалось переключить движок.")
+            }
+            isSwitching = false
         }
     }
 
