@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 # Extensions that typically need ffmpeg (libsndfile may lack codecs)
 _FFMPEG_SUFFIXES = {".ogg", ".oga", ".opus", ".webm", ".m4a", ".mp3", ".mp4", ".aac"}
 
+# Checked when ffmpeg is not on PATH (Apple Silicon and Intel Homebrew).
+_FFMPEG_FALLBACK_PATHS = ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg")
+
 
 class AudioDecodeError(ValueError):
     """Invalid or unsupported audio input."""
@@ -50,11 +53,27 @@ def _decode_with_soundfile(data: bytes, sample_rate: int) -> np.ndarray:
     return _resample_linear(audio, src_rate, sample_rate)
 
 
+def _find_ffmpeg() -> str | None:
+    """ffmpeg from PATH, or from the usual Homebrew prefixes.
+
+    launchd starts the STT agent with a minimal PATH (/usr/bin:/bin:...), so a
+    Homebrew ffmpeg is invisible to ``shutil.which`` there.
+    """
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    for candidate in _FFMPEG_FALLBACK_PATHS:
+        if Path(candidate).is_file():
+            return candidate
+    return None
+
+
 def _decode_with_ffmpeg(data: bytes, sample_rate: int, suffix: str) -> np.ndarray:
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = _find_ffmpeg()
     if not ffmpeg:
         raise AudioDecodeError(
-            f"Формат {suffix or 'unknown'} требует ffmpeg, но ffmpeg не найден в PATH"
+            f"Формат {suffix or 'unknown'} требует ffmpeg, но ffmpeg не найден "
+            "(установите: brew install ffmpeg)"
         )
 
     suffix = suffix if suffix.startswith(".") else f".{suffix}" if suffix else ".bin"
@@ -88,10 +107,15 @@ def _decode_with_ffmpeg(data: bytes, sample_rate: int, suffix: str) -> np.ndarra
             raise AudioDecodeError(f"ffmpeg не смог декодировать аудио: {err}") from e
         except subprocess.TimeoutExpired as e:
             raise AudioDecodeError("ffmpeg: таймаут декодирования") from e
+        except OSError as e:
+            raise AudioDecodeError(f"ffmpeg не запустился: {e}") from e
 
         import soundfile as sf
 
-        audio, sr = sf.read(str(dst), dtype="float32", always_2d=False)
+        try:
+            audio, sr = sf.read(str(dst), dtype="float32", always_2d=False)
+        except Exception as e:
+            raise AudioDecodeError(f"ffmpeg вернул нечитаемый WAV: {e}") from e
         audio = _to_mono_float32(np.asarray(audio))
         return _resample_linear(audio, int(sr), sample_rate)
 
@@ -119,24 +143,36 @@ def decode_audio_bytes(
         x in ct for x in ("ogg", "opus", "webm", "mp4", "m4a", "mpeg", "mp3")
     )
 
+    # Every failure below must surface as AudioDecodeError (HTTP 400), never as a
+    # raw libsndfile/OS error (HTTP 500).
+    errors: list[str] = []
     if prefer_ffmpeg:
         try:
-            return _decode_with_ffmpeg(data, sample_rate, suffix or ".ogg")
-        except AudioDecodeError:
-            # fall through to soundfile once
-            pass
+            return _non_empty(_decode_with_ffmpeg(data, sample_rate, suffix or ".ogg"))
+        except AudioDecodeError as e:
+            errors.append(str(e))
 
     try:
         audio = _decode_with_soundfile(data, sample_rate)
     except Exception as e:
+        errors.append(f"soundfile: {e}")
         if prefer_ffmpeg:
-            raise
+            raise AudioDecodeError(_failure_message(errors)) from e
         logger.debug("soundfile decode failed (%s), trying ffmpeg", e)
         try:
-            return _decode_with_ffmpeg(data, sample_rate, suffix or ".wav")
-        except AudioDecodeError:
-            raise AudioDecodeError(f"Не удалось декодировать аудио: {e}") from e
+            audio = _decode_with_ffmpeg(data, sample_rate, suffix or ".wav")
+        except AudioDecodeError as e2:
+            errors.append(str(e2))
+            raise AudioDecodeError(_failure_message(errors)) from e
 
+    return _non_empty(audio)
+
+
+def _non_empty(audio: np.ndarray) -> np.ndarray:
     if len(audio) == 0:
         raise AudioDecodeError("Аудио не содержит сэмплов")
     return audio
+
+
+def _failure_message(errors: list[str]) -> str:
+    return "Не удалось декодировать аудио: " + "; ".join(errors)

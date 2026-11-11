@@ -61,9 +61,21 @@ def _server_engine_config(config: Config) -> Config:
     return Config(**data)
 
 
+# Engines whose models produce the subtitle/sound-event hallucinations that
+# text.whisper_artifacts targets. Other engines (Qwen3-ASR) are never filtered:
+# the phrase list would only delete real words from their output.
+WHISPER_FAMILY_ENGINES = frozenset({"mlx_whisper", "whisper_cpp"})
+
+
+def _artifact_filter_applies(config: Config) -> bool:
+    return (
+        config.text_processing.strip_whisper_tail_artifacts
+        and config.stt_server.engine in WHISPER_FAMILY_ENGINES
+        and bool(config.text_processing.whisper_artifact_languages)
+    )
+
+
 def _strip_artifacts(text: str, config: Config) -> str:
-    if not config.text_processing.strip_whisper_tail_artifacts:
-        return text
     from text.whisper_artifacts import strip_trailing_whisper_artifacts
 
     langs = frozenset(config.text_processing.whisper_artifact_languages)
@@ -79,19 +91,32 @@ def _strip_artifacts(text: str, config: Config) -> str:
 
 
 def _strip_artifacts_payload(payload: dict, config: Config) -> dict:
-    """Strip known Whisper tails on every segment, then rebuild text."""
+    """Strip known Whisper hallucinations per segment (Whisper engines only).
+
+    ``text`` is rebuilt from segments only when a segment actually changed, so
+    the engine's own text (spacing, CJK/Thai joins) is kept otherwise.
+    """
+    if not _artifact_filter_applies(config):
+        return payload
     segments = list(payload.get("segments") or [])
     if segments:
         cleaned = []
+        changed = False
         for seg in segments:
             item = dict(seg)
-            item["text"] = _strip_artifacts(item.get("text") or "", config)
+            original = item.get("text") or ""
+            item["text"] = _strip_artifacts(original, config)
+            if item["text"] != original:
+                changed = True
             if item["text"].strip():
                 cleaned.append(item)
-        payload["segments"] = cleaned
-        payload["text"] = " ".join(
-            (s.get("text") or "").strip() for s in cleaned if (s.get("text") or "").strip()
-        ).strip()
+        if changed:
+            payload["segments"] = cleaned
+            payload["text"] = " ".join(
+                (s.get("text") or "").strip()
+                for s in cleaned
+                if (s.get("text") or "").strip()
+            ).strip()
     else:
         payload["text"] = _strip_artifacts(payload.get("text") or "", config)
     return payload
@@ -398,7 +423,9 @@ def create_app(config: Config) -> FastAPI:
             )
 
         try:
-            audio = decode_audio_bytes(
+            # Off the event loop: ffmpeg can take seconds, and /healthz must stay live.
+            audio = await asyncio.to_thread(
+                decode_audio_bytes,
                 data,
                 filename=file.filename,
                 content_type=file.content_type,
@@ -406,6 +433,11 @@ def create_app(config: Config) -> FastAPI:
             )
         except AudioDecodeError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:
+            logger.warning("STT: unexpected audio decode error: %s", e)
+            raise HTTPException(
+                status_code=400, detail=f"Не удалось декодировать аудио: {e}"
+            ) from e
 
         acquired = False
         try:

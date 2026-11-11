@@ -87,6 +87,8 @@ class Qwen3ASRTranscriber:
         self.qcfg = qcfg
         self.sample_rate = 16000
         self._model = None
+        # Built once on the first word-timestamp request, not per request.
+        self._aligner = None
         logger.info(
             "Qwen3ASRTranscriber: model=%s quantization_bits=%s",
             qcfg.model_name,
@@ -96,6 +98,7 @@ class Qwen3ASRTranscriber:
     def release(self) -> None:
         """Drop the in-process weights so idle unload can free them."""
         self._model = None
+        self._aligner = None
         try:
             from mlx_qwen3_asr.load_models import _ModelHolder
 
@@ -155,12 +158,24 @@ class Qwen3ASRTranscriber:
                 return_timestamps=bool(word_timestamps),
                 return_chunks=True,
                 context=prompt,
+                forced_aligner=self._ensure_aligner() if word_timestamps else None,
                 verbose=False,
             )
         except Exception as exc:
             logger.error("Ошибка detailed-транскрипции Qwen3-ASR: %s", exc)
             raise RuntimeError(f"Ошибка транскрипции Qwen3-ASR: {exc}") from exc
         return _payload(result, duration, word_timestamps, effective)
+
+    def _ensure_aligner(self):
+        """One ForcedAligner per loaded engine, loaded from the local cache when present."""
+        if self._aligner is not None:
+            return self._aligner
+        from mlx_qwen3_asr.forced_aligner import DEFAULT_FORCED_ALIGNER_MODEL, ForcedAligner
+
+        from transcription.hf_cache import resolve_cached_snapshot
+
+        self._aligner = ForcedAligner(resolve_cached_snapshot(DEFAULT_FORCED_ALIGNER_MODEL))
+        return self._aligner
 
     def _ensure_model(self):
         if self._model is not None:
@@ -169,7 +184,17 @@ class Qwen3ASRTranscriber:
         from mlx_qwen3_asr.convert import quantize_model
         from mlx_qwen3_asr.load_models import load_model
 
-        model, _config = load_model(self.qcfg.model_name, dtype=mx.float16)
+        from transcription.hf_cache import resolve_cached_snapshot
+
+        source = resolve_cached_snapshot(self.qcfg.model_name)
+        try:
+            model, _config = load_model(source, dtype=mx.float16)
+        except Exception:
+            if source == self.qcfg.model_name:
+                raise
+            # Damaged or partial local snapshot: let the library re-resolve via the hub.
+            logger.warning("Qwen3-ASR: local snapshot failed to load, retrying via hub", exc_info=True)
+            model, _config = load_model(self.qcfg.model_name, dtype=mx.float16)
         bits = self.qcfg.quantization_bits
         if bits is not None:
             quantize_model(

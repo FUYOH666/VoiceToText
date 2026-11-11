@@ -4,13 +4,98 @@
 """
 import os
 import logging
+import typing
 from pathlib import Path
-from typing import Optional, Literal, List
+from typing import Any, Optional, Literal, List
 from pydantic import BaseModel, Field, field_validator, model_validator
 import yaml
 
 
 logger = logging.getLogger(__name__)
+
+ENV_PREFIX = "VTT2_"
+# Variables with the prefix that are not config fields (VTT2_CONFIG: config path for the Swift app).
+_ENV_NON_CONFIG_KEYS = frozenset({"CONFIG"})
+
+
+def _model_class(annotation: Any) -> Optional[type[BaseModel]]:
+    """The BaseModel subclass inside an annotation, unwrapping Optional/Union."""
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return annotation
+    for arg in typing.get_args(annotation):
+        found = _model_class(arg)
+        if found is not None:
+            return found
+    return None
+
+
+def _resolve_env_path(root: type[BaseModel], key: str) -> Optional[tuple[list[str], Any]]:
+    """Map an env key (without prefix) to a config field path and its annotation.
+
+    ``A__B`` splits levels explicitly. Otherwise underscores are ambiguous
+    (``STT_SERVER_PORT``), so each level takes the longest token run that names
+    a field of the current model.
+    """
+    key = key.lower()
+    explicit = "__" in key
+    parts = key.split("__") if explicit else key.split("_")
+
+    path: list[str] = []
+    model: Optional[type[BaseModel]] = root
+    annotation: Any = None
+    i = 0
+    while i < len(parts):
+        if model is None:
+            return None  # more parts left, but the previous field is not a section
+        fields = model.model_fields
+        if explicit:
+            name, j = parts[i], i + 1
+            if name not in fields:
+                return None
+        else:
+            for j in range(len(parts), i, -1):
+                name = "_".join(parts[i:j])
+                if name in fields:
+                    break
+            else:
+                return None
+        path.append(name)
+        annotation = fields[name].annotation
+        model = _model_class(annotation)
+        i = j
+    return (path, annotation) if path else None
+
+
+def _coerce_env_value(raw: str, annotation: Any) -> Any:
+    """Turn an env string into what the field expects; pydantic validates the rest."""
+    origin = typing.get_origin(annotation)
+    args = typing.get_args(annotation)
+    if origin in (list, List):
+        return [item.strip() for item in raw.split(",") if item.strip()]
+    if annotation is str or (args and all(a in (str, type(None)) for a in args)):
+        return raw
+    if raw.isdigit():
+        return int(raw)
+    if raw.replace(".", "", 1).isdigit():
+        return float(raw)
+    if raw.lower() in ("true", "false"):
+        return raw.lower() == "true"
+    return raw
+
+
+def _set_nested_value(data: dict, path: list[str], value: Any) -> bool:
+    """Set data[path...] = value, creating sections. False if a parent is a scalar."""
+    current = data
+    for key in path[:-1]:
+        child = current.get(key)
+        if child is None:
+            child = {}
+            current[key] = child
+        if not isinstance(child, dict):
+            return False
+        current = child
+    current[path[-1]] = value
+    return True
 
 
 class MLXWhisperConfig(BaseModel):
@@ -296,46 +381,39 @@ class Config(BaseModel):
             logger.error(f"Ошибка валидации конфигурации: {e}")
             raise ValueError(f"Невалидная конфигурация: {e}") from e
     
-    @staticmethod
-    def _apply_env_overrides(config_data: dict) -> dict:
-        """Применение переопределений из ENV переменных"""
-        # Поддержка основных ENV переопределений
-        # Например: VTT2_TRANSCRIPTION_WHISPER_CPP_THREADS=4
-        # Префикс: VTT2_
-        
-        env_prefix = "VTT2_"
-        
-        def set_nested_value(d: dict, keys: list[str], value: str):
-            """Установка значения во вложенном словаре"""
-            current = d
-            for key in keys[:-1]:
-                if key not in current:
-                    current[key] = {}
-                current = current[key]
-            current[keys[-1]] = value
-        
+    @classmethod
+    def _apply_env_overrides(cls, config_data: dict) -> dict:
+        """Применение переопределений из ENV переменных (приоритет выше YAML).
+
+        Имя переменной: ``VTT2_`` + путь к полю. Путь ищется по схеме конфига,
+        поэтому имена полей с подчёркиваниями работают и с одиночным ``_``:
+        ``VTT2_STT_SERVER_PORT=8766``,
+        ``VTT2_TRANSCRIPTION_MLX_WHISPER_MODEL_NAME=...``.
+        Двойное подчёркивание задаёт уровни явно: ``VTT2_STT_SERVER__PORT=8766``.
+        Неизвестные переменные пропускаются с предупреждением.
+        """
         for env_key, env_value in os.environ.items():
-            if not env_key.startswith(env_prefix):
+            if not env_key.startswith(ENV_PREFIX):
                 continue
-            
-            # Удаление префикса и конвертация в ключи
-            keys = env_key[len(env_prefix):].lower().split('_')
-            
-            # Конвертация значения в правильный тип
-            try:
-                # Попытка конвертации в число
-                if env_value.isdigit():
-                    env_value = int(env_value)
-                elif env_value.replace('.', '', 1).isdigit():
-                    env_value = float(env_value)
-                elif env_value.lower() in ('true', 'false'):
-                    env_value = env_value.lower() == 'true'
-            except (ValueError, AttributeError):
-                pass  # Оставляем как строку
-            
-            set_nested_value(config_data, keys, env_value)
-            logger.debug(f"ENV override: {env_key} = {env_value}")
-        
+            key = env_key[len(ENV_PREFIX):]
+            if not key or key in _ENV_NON_CONFIG_KEYS:
+                continue
+
+            resolved = _resolve_env_path(cls, key)
+            if resolved is None:
+                logger.warning("ENV override ignored: %s does not match a config field", env_key)
+                continue
+            path, annotation = resolved
+            value = _coerce_env_value(env_value, annotation)
+            if not _set_nested_value(config_data, path, value):
+                logger.warning(
+                    "ENV override ignored: %s (a parent of %s is not a section)",
+                    env_key,
+                    ".".join(path),
+                )
+                continue
+            logger.debug("ENV override: %s -> %s", env_key, ".".join(path))
+
         return config_data
     
     @staticmethod

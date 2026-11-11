@@ -106,14 +106,41 @@ class TestConfigLoader:
         monkeypatch.setenv("VTT2_AUDIO_SAMPLE_RATE", "22050")
         
         config = Config.from_yaml(str(temp_config_file), project_root)
-        
-        # Примечание: ENV переопределения могут не работать из-за упрощенной реализации
-        # Проверяем что конфигурация загружается корректно
-        assert config.transcription.mlx_whisper.model_name in [
-            "mlx-community/whisper-medium",  # дефолт
-            "mlx-community/whisper-large-v3"  # если ENV переопределение работает
-        ]
-        assert config.audio.sample_rate in [16000, 22050]
+
+        # Multi-word field names (mlx_whisper, model_name) resolve via the schema.
+        assert config.transcription.mlx_whisper.model_name == "mlx-community/whisper-large-v3"
+        assert config.audio.sample_rate == 22050
+
+    def test_env_overrides_stt_server_and_explicit_levels(
+        self, temp_config_file, project_root, monkeypatch
+    ):
+        monkeypatch.setenv("VTT2_STT_SERVER_ENGINE", "qwen3_asr")
+        monkeypatch.setenv("VTT2_STT_SERVER__PORT", "8766")
+        monkeypatch.setenv("VTT2_TEXT_PROCESSING_WHISPER_ARTIFACT_LANGUAGES", "en")
+        config = Config.from_yaml(str(temp_config_file), project_root)
+        assert config.stt_server.engine == "qwen3_asr"
+        assert config.stt_server.port == 8766
+        assert config.text_processing.whisper_artifact_languages == ["en"]
+
+    def test_env_overrides_unknown_and_reserved_keys_ignored(
+        self, temp_config_file, project_root, monkeypatch, caplog
+    ):
+        monkeypatch.setenv("VTT2_CONFIG", "/tmp/somewhere/config.yaml")  # Swift app's path var
+        monkeypatch.setenv("VTT2_NOT_A_SETTING", "1")
+        monkeypatch.setenv("VTT2_AUDIO_SAMPLE_RATE_EXTRA", "1")  # below a scalar field
+        with caplog.at_level("WARNING"):
+            config = Config.from_yaml(str(temp_config_file), project_root)
+        assert config.audio.sample_rate == 16000
+        assert "VTT2_NOT_A_SETTING" in caplog.text
+        assert "VTT2_AUDIO_SAMPLE_RATE_EXTRA" in caplog.text
+        assert "VTT2_CONFIG" not in caplog.text
+
+    def test_env_override_string_field_keeps_digits_as_text(
+        self, temp_config_file, project_root, monkeypatch
+    ):
+        monkeypatch.setenv("VTT2_APP_VERSION", "2")
+        config = Config.from_yaml(str(temp_config_file), project_root)
+        assert config.app.version == "2"
     
     def test_relative_paths(self, project_root):
         """Тест что относительные пути разрешаются корректно"""

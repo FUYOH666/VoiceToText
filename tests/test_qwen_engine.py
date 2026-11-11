@@ -78,10 +78,23 @@ def _install_fake_qwen(monkeypatch):
     tok.canonicalize_language = lambda value: names.get(str(value).lower(), value)
     tok._TokenizerHolder = type("T", (), {"clear": staticmethod(lambda: None)})
 
+    aligner_mod = types.ModuleType("mlx_qwen3_asr.forced_aligner")
+    aligner_mod.DEFAULT_FORCED_ALIGNER_MODEL = "Qwen/Qwen3-ForcedAligner-0.6B"
+    calls["aligner"] = []
+
+    class ForcedAligner:
+        def __init__(self, model_path):
+            calls["aligner"].append(model_path)
+
+    aligner_mod.ForcedAligner = ForcedAligner
+
     monkeypatch.setitem(sys.modules, "mlx_qwen3_asr", pkg)
     monkeypatch.setitem(sys.modules, "mlx_qwen3_asr.convert", convert)
     monkeypatch.setitem(sys.modules, "mlx_qwen3_asr.load_models", load_models)
     monkeypatch.setitem(sys.modules, "mlx_qwen3_asr.tokenizer", tok)
+    monkeypatch.setitem(sys.modules, "mlx_qwen3_asr.forced_aligner", aligner_mod)
+    # Hermetic: never look at the developer's real Hugging Face cache.
+    monkeypatch.setattr("transcription.hf_cache.resolve_cached_snapshot", lambda name: name)
     return calls, sentinel
 
 
@@ -143,6 +156,53 @@ class TestQwenTranscribeDetailed:
         assert payload["language"] == "ru"
         assert payload["segments"][0]["words"][0]["word"] == "hello"
         assert payload["segments"][1]["words"][0]["word"] == "world"
+
+    def test_aligner_built_once_and_only_for_words(self, monkeypatch):
+        calls, _sentinel = _install_fake_qwen(monkeypatch)
+        engine = Qwen3ASRTranscriber(_config())
+        audio = np.zeros(16000, dtype=np.float32)
+        engine.transcribe_detailed(audio, word_timestamps=False, language="ru")
+        assert calls["aligner"] == []
+        assert calls["transcribe"][0]["forced_aligner"] is None
+        engine.transcribe_detailed(audio, word_timestamps=True, language="ru")
+        engine.transcribe_detailed(audio, word_timestamps=True, language="ru")
+        assert calls["aligner"] == ["Qwen/Qwen3-ForcedAligner-0.6B"]
+        assert calls["transcribe"][1]["forced_aligner"] is calls["transcribe"][2]["forced_aligner"]
+        engine.release()
+        engine.transcribe_detailed(audio, word_timestamps=True, language="ru")
+        assert len(calls["aligner"]) == 2
+
+    def test_loads_cached_snapshot_without_hub(self, monkeypatch):
+        calls, _sentinel = _install_fake_qwen(monkeypatch)
+        monkeypatch.setattr(
+            "transcription.hf_cache.resolve_cached_snapshot",
+            lambda name: f"/cache/{name}",
+        )
+        engine = Qwen3ASRTranscriber(_config())
+        engine.transcribe_detailed(np.zeros(1600, dtype=np.float32), language="ru")
+        assert calls["load"][0][0] == "/cache/Qwen/Qwen3-ASR-1.7B"
+
+    def test_broken_snapshot_falls_back_to_repo_id(self, monkeypatch):
+        calls, sentinel = _install_fake_qwen(monkeypatch)
+        monkeypatch.setattr(
+            "transcription.hf_cache.resolve_cached_snapshot",
+            lambda name: f"/cache/{name}",
+        )
+        load_models = sys.modules["mlx_qwen3_asr.load_models"]
+
+        def flaky_load(name, dtype=None):
+            calls["load"].append((name, dtype))
+            if name.startswith("/cache/"):
+                raise FileNotFoundError("weights missing")
+            return sentinel, object()
+
+        monkeypatch.setattr(load_models, "load_model", flaky_load)
+        engine = Qwen3ASRTranscriber(_config())
+        engine.transcribe_detailed(np.zeros(1600, dtype=np.float32), language="ru")
+        assert [name for name, _ in calls["load"]] == [
+            "/cache/Qwen/Qwen3-ASR-1.7B",
+            "Qwen/Qwen3-ASR-1.7B",
+        ]
 
     def test_auto_is_library_autodetect(self, monkeypatch):
         calls, _sentinel = _install_fake_qwen(monkeypatch)
