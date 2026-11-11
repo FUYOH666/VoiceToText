@@ -103,7 +103,7 @@ launchctl kickstart -k "gui/$(id -u)/ai.vtt2.stt"
 
 On this Mac the first request downloaded 2.0 GB and answered a 3-second clip in 43 seconds. The same clip with the model already loaded took 0.22 seconds. After 15 minutes idle the weights unload; the next request loads that snapshot again and does not quantize it.
 
-Whisper stays in the menu. That item rewrites `stt_server.engine` and restarts only the STT process. On 8 GB RAM the Whisper checkpoint to pick is `whisper-medium-mlx`. Remote GPU ASR stays under `transcription.engine: remote_asr` (host in gitignored `.env.vtt2`). `model=` on the POST does not switch checkpoints. Details: [docs/STT_API.md](docs/STT_API.md).
+**Choosing a model.** Menu «Модель ▸» lists verified MLX checkpoints, quantized first: Qwen3-ASR 1.7B / 0.6B 8-bit, Whisper large-v3 and large-v3-turbo in 8-bit and 4-bit, fp16 for maximum quality, Whisper small as the minimum. Each item shows its download size or memory use; ★ marks the one recommended for your Mac's memory (16 GB and more: Qwen3-ASR 1.7B 8-bit; less: 0.6B 8-bit), and models that need more memory than you have are greyed out. Clicking a model that isn't downloaded yet downloads it in the background (dictation keeps working) and switches to it. «Своя модель с Hugging Face…» accepts any MLX Whisper or Qwen3-ASR repo. The choice is stored in `~/Library/Application Support/VoiceToText/config.yaml`, not in the repo. Remote GPU ASR stays under `transcription.engine: remote_asr` (host in gitignored `.env.vtt2`). `model=` on the POST does not switch checkpoints. Details: [docs/STT_API.md](docs/STT_API.md).
 
 ---
 

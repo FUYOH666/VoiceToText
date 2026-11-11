@@ -30,7 +30,9 @@ final class AppState: ObservableObject {
     @Published var menuSymbol: String = AppState.idleSymbol
     @Published var status: String = "Готов"
     @Published var lastText: String = ""
-    @Published var engine: STTEngineChoice?
+    @Published private(set) var models: [ModelInfo] = []
+    @Published private(set) var memoryGB: Double?
+    @Published private(set) var modelsUnavailable = false
     @Published var isSwitching = false
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var history: [DictationEntry] = []
@@ -48,10 +50,16 @@ final class AppState: ObservableObject {
     private static let soundsKey = "soundsEnabled"
 
     var statusLine: String {
-        if phase == .idle, status == "Готов", let title = engine?.title {
+        if phase == .idle, status == "Готов", let title = activeModel?.title {
             return "\(status) · \(title)"
         }
         return status
+    }
+
+    var activeModel: ModelInfo? { models.first { $0.active } }
+
+    var modelMenuTitle: String {
+        "Модель: \(ModelMenu.shortTitle(activeModel))"
     }
 
     var isBusy: Bool { phase != .idle }
@@ -64,36 +72,21 @@ final class AppState: ObservableObject {
         }
     }
 
-    func engineButtonTitle(_ choice: STTEngineChoice) -> String {
-        engine == choice ? "✓ \(choice.title)" : choice.title
-    }
-
     private let recorder = Recorder()
     private let hotkey = HotkeyController()
     private let client: STTClient
+    private let modelsClient: ModelsClient
     private let store = DictationStore()
-    private let engineController: EngineController?
     private var transcribeTask: Task<Void, Never>?
+    private var downloadTask: Task<Void, Never>?
     private var limitTimers: [Timer] = []
+    private var modelsTimer: Timer?
     private var errorReset: Task<Void, Never>?
 
     init(config: AppConfig = AppConfig.load()) {
         client = STTClient(config: config)
+        modelsClient = ModelsClient(config: config)
         soundsEnabled = UserDefaults.standard.object(forKey: Self.soundsKey) as? Bool ?? true
-        if let url = AppConfig.locateConfigFile() {
-            engineController = EngineController(
-                configURL: url,
-                uvExecutable: EngineProcesses.uvExecutable(),
-                run: { executable, arguments, cwd in
-                    EngineProcesses.run(executable: executable, arguments: arguments, cwd: cwd)
-                }
-            )
-            if let text = try? String(contentsOf: url, encoding: .utf8) {
-                engine = EngineConfig.read(from: text)
-            }
-        } else {
-            engineController = nil
-        }
         hotkey.onPressed = { [weak self] in
             Task { @MainActor in self?.toggle() }
         }
@@ -112,6 +105,11 @@ final class AppState: ObservableObject {
         Paster.logPermissions()
         refreshHistory()
         Task { await self.warmupPermission() }
+        Task { await self.refreshModels() }
+        // The list is cheap (local HTTP); keep the menu fresh without a menu-open hook.
+        modelsTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.refreshModels() }
+        }
     }
 
     // MARK: - Dictation
@@ -347,39 +345,147 @@ final class AppState: ObservableObject {
 
     // MARK: - Menu actions
 
-    func selectEngine(_ target: STTEngineChoice) {
-        if isSwitching { return }
-        if isBusy {
-            presentAlert(title: "Движок", message: "Сначала остановите запись.")
+    // MARK: - Models
+
+    func refreshModels() async {
+        do {
+            let list = try await modelsClient.list()
+            models = list.data
+            memoryGB = list.systemMemoryGB
+            modelsUnavailable = false
+        } catch {
+            modelsUnavailable = true
+            AppLog.warning("model list unavailable: \(error)")
+        }
+    }
+
+    /// Menu click on a model: switch to it, or offer to download it first.
+    func selectModel(_ model: ModelInfo) {
+        guard !isSwitching, downloadTask == nil else {
+            presentAlert(title: "Модель", message: "Дождитесь окончания текущей операции с моделью.")
             return
         }
-        if engine == target { return }
-        guard let engineController else {
-            presentAlert(title: "Движок", message: EngineSwitchError.configNotFound.message)
+        if isBusy {
+            presentAlert(title: "Модель", message: "Сначала закончите диктовку.")
+            return
+        }
+        if model.active { return }
+        if !model.fitsMemory {
+            let need = model.minMemoryGB.map { "\(Int($0)) ГБ" } ?? "больше"
+            presentAlert(title: model.title, message: "Этой модели нужно не меньше \(need) памяти.")
+            return
+        }
+        if model.installed {
+            Task { await activate(model) }
+            return
+        }
+        let details = [
+            "Скачать \(ModelMenu.size(model.downloadGB)), в работе ~\(ModelMenu.size(model.ramGB)) памяти.",
+            model.note ?? "",
+            "Диктовка продолжит работать на текущей модели, пока идёт загрузка.",
+        ].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        guard confirm(title: model.title, message: details, ok: "Скачать и включить") else { return }
+        download(model)
+    }
+
+    func addCustomModel() {
+        guard !isBusy, !isSwitching, downloadTask == nil else { return }
+        guard let repo = askText(
+            title: "Своя модель с Hugging Face",
+            message: "Адрес репозитория, например mlx-community/whisper-large-v3-turbo.\nПодходят MLX-модели Whisper и Qwen3-ASR.",
+            placeholder: "org/name"
+        ) else { return }
+        status = "Проверяю \(repo)…"
+        Task {
+            do {
+                let model = try await modelsClient.addCustom(repo: repo)
+                await refreshModels()
+                status = "Готов"
+                selectModel(models.first { $0.id == model.id } ?? model)
+            } catch let error as ModelsClientError {
+                showError(error.userMessage)
+            } catch {
+                showError("Не удалось проверить модель")
+            }
+        }
+    }
+
+    private func download(_ model: ModelInfo) {
+        downloadTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                var progress = try await modelsClient.startDownload(model.id)
+                while progress.isRunning {
+                    let percent = progress.progress.map { " \(Int(($0 * 100).rounded()))%" } ?? "…"
+                    if phase == .idle { status = "Скачиваю \(model.title)\(percent)" }
+                    await refreshModels()
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    progress = try await modelsClient.downloadStatus(model.id)
+                }
+                downloadTask = nil
+                guard progress.state == "done" else {
+                    showError("Не удалось скачать: \(progress.error ?? "ошибка сети")")
+                    await refreshModels()
+                    return
+                }
+                await refreshModels()
+                await activate(models.first { $0.id == model.id } ?? model)
+            } catch let error as ModelsClientError {
+                downloadTask = nil
+                showError(error.userMessage)
+            } catch {
+                downloadTask = nil
+            }
+        }
+    }
+
+    private func activate(_ model: ModelInfo) async {
+        if isBusy {
+            // A dictation started meanwhile; switch after it instead of under it.
+            status = "Модель скачана — выберите её в меню"
             return
         }
         isSwitching = true
-        let previous = status
-        status = "Переключение…"
-        Task {
-            do {
-                try await Task.detached {
-                    try engineController.select(target)
-                }.value
-                engine = target
-                status = "Готов"
-                AppLog.info("STT engine switched to \(target.rawValue)")
-            } catch let error as EngineSwitchError {
-                status = previous == "Переключение…" ? "Готов" : previous
-                AppLog.error("engine switch failed: \(error.message)")
-                presentAlert(title: "Движок", message: error.message)
-            } catch {
-                status = previous == "Переключение…" ? "Готов" : previous
-                AppLog.error("engine switch failed")
-                presentAlert(title: "Движок", message: "Не удалось переключить движок.")
-            }
-            isSwitching = false
+        status = "Включаю \(model.title)…"
+        menuSymbol = Self.processingSymbol
+        defer { isSwitching = false }
+        do {
+            try await modelsClient.activate(model.id)
+            await refreshModels()
+            AppLog.info("model switched to \(model.id)")
+            setIdle("Готов")
+        } catch let error as ModelsClientError {
+            await refreshModels()
+            showError(error.userMessage)
+        } catch {
+            showError("Не удалось переключить модель")
         }
+    }
+
+    private func confirm(title: String, message: String, ok: String) -> Bool {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: ok)
+        alert.addButton(withTitle: "Отмена")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func askText(title: String, message: String, placeholder: String) -> String? {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        field.placeholderString = placeholder
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Проверить")
+        alert.addButton(withTitle: "Отмена")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let value = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 
     func showHealth() {
