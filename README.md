@@ -34,7 +34,7 @@
 
 ## Why
 
-Most people speak around 150 words a minute and type around 40. When your hands can't keep up with your head, thoughts get lost: you switch context, you shorten the idea, you forget the second half. Speaking keeps you in the flow. You may say more than you need, but you never say less — and extra words are easy to cut.
+Most people speak around 150 words a minute but type around 52 on a keyboard ([Aalto University study of 168,000 typists](https://aalto.fi/en/news/the-traits-of-fast-typists-discovered-by-analysing-136-million-keystrokes)) — about three times slower. When your hands can't keep up with your head, thoughts get lost: you switch context, you shorten the idea, you forget the second half. Speaking keeps you in the flow. You may say more than you need, but you never say less — and extra words are easy to cut.
 
 VoiceToText is built for people who think out loud all day: founders, managers, engineers, anyone who writes a lot of messages, notes and prompts.
 
