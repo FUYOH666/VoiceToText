@@ -31,6 +31,7 @@ from config.loader import Config
 from server import errors as err
 from server.errors import APIError, install_error_handlers
 from server.limits import BodySizeLimitMiddleware
+from server.models_api import ModelHost, register_model_routes
 from server.worker import (
     PRIORITY_INTERACTIVE,
     InferenceWorker,
@@ -293,6 +294,52 @@ def _transcribe_job(
         state.last_used_at = time.time()
 
 
+async def _switch_model(new_config: Config) -> None:
+    """Unload the current model and load the one ``new_config`` selects.
+
+    Runs on the inference worker like every other model job, so it waits for a
+    running transcription instead of pulling the model out from under it. On a
+    load failure the previous selection is restored (and loads on the next
+    request); nothing is persisted by this function.
+    """
+    worker = state.worker
+    if worker is None or state.config is None:
+        raise APIError(503, err.MODEL_LOADING, "STT is not initialized yet")
+    try:
+        lease = await worker.acquire(
+            PRIORITY_INTERACTIVE, timeout=float(state.config.stt_server.queue_timeout_seconds)
+        )
+    except QueueTimeoutError as e:
+        raise APIError(
+            429, err.BUSY, "STT busy: try switching again shortly",
+            retry_after=err.RETRY_AFTER_BUSY_SECONDS,
+        ) from e
+    previous = state.config
+    try:
+        if state.engine is not None or state.ready:
+            await lease.run(_unload_model_sync, kind="unload")
+        state.config = new_config
+        state.model_name = _configured_model_name(new_config)
+        state.loading = True
+        state.warmup_error = None
+        logger.info("STT switching model → %s", state.model_name)
+        try:
+            await lease.run(
+                _load_model_job, new_config, timeout=_request_timeout(new_config), kind="load"
+            )
+        except JobTimeoutError as e:
+            raise APIError(
+                503, err.MODEL_LOADING, "New model is still loading; retry shortly",
+                retry_after=err.RETRY_AFTER_LOADING_SECONDS,
+            ) from e
+        except Exception as e:
+            state.config = previous
+            state.model_name = _configured_model_name(previous)
+            raise APIError(500, err.MODEL_LOAD_FAILED, f"Could not load the new model: {e}") from e
+    finally:
+        lease.close()
+
+
 async def _idle_unload_once() -> bool:
     """One idle-unload check. True if the model was unloaded."""
     cfg, worker = state.config, state.worker
@@ -401,6 +448,9 @@ def create_app(config: Config) -> FastAPI:
 
     app = FastAPI(title="VTTv2 Local STT", version=config.app.version, lifespan=lifespan)
     install_error_handlers(app)
+    register_model_routes(
+        app, ModelHost(get_config=lambda: state.config or config, switch=_switch_model)
+    )
     max_upload_mb = config.stt_server.max_upload_mb
     app.add_middleware(
         BodySizeLimitMiddleware,
@@ -567,6 +617,9 @@ def create_app(config: Config) -> FastAPI:
                 retry_after=err.RETRY_AFTER_BUSY_SECONDS,
             ) from e
 
+        # The model may have been switched (/v1/models/{id}/activate) while this
+        # request waited for the slot; use the config that is active now.
+        cfg = state.config or cfg
         timeout = _request_timeout(cfg)
         start = time.time()
         try:

@@ -26,6 +26,12 @@ MODEL_LOAD_FAILED = "model_load_failed"
 TRANSCRIPTION_FAILED = "transcription_failed"
 TRANSCRIPTION_TIMEOUT = "transcription_timeout"
 INTERNAL_ERROR = "internal_error"
+# Model management (/v1/models).
+MODEL_NOT_FOUND = "model_not_found"
+MODEL_NOT_INSTALLED = "model_not_installed"
+MODEL_ACTIVE = "model_active"
+MODEL_DOWNLOADING = "model_downloading"
+UNSUPPORTED_MODEL = "unsupported_model"
 
 RETRY_AFTER_BUSY_SECONDS = 5
 RETRY_AFTER_LOADING_SECONDS = 2
