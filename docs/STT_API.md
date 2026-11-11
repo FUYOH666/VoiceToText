@@ -37,7 +37,7 @@ uv run python src/vtt2/main.py --install
 
 | Method | Path | Meaning |
 |--------|------|---------|
-| `GET` | `/healthz` | Process alive (`200`). Includes `ready`, `loading`, `idle_unload_seconds` |
+| `GET` | `/healthz` | Process alive (`200`). Includes `ready`, `loading`, `last_error`, `active_jobs`, `queued`, `idle_unload_seconds` |
 | `GET` | `/readyz` | Model loaded (`200`); else `503` (idle / not yet loaded / loading) |
 | `POST` | `/v1/audio/transcriptions` | Transcribe; **loads model on demand** if unloaded |
 
@@ -78,9 +78,48 @@ With `timestamp_granularities=word`, a segment may also include `"words": [{"wor
 
 `response_format=text` returns plaintext (`text/plain`), not JSON.
 
-HTTP codes: `400` bad/empty audio, invalid `response_format`, unknown `language`, or oversized `prompt`; `413` file too large; `503` load failed / busy / timeout; `500` internal.
+### Errors
 
-Max upload size: `stt_server.max_upload_mb` (default 80). That is headroom for about 20 minutes of 16 kHz mono 16-bit WAV (~38 MB). It is not a promise that every 20-minute file fits: a 48 kHz PCM WAV can be larger than 80 MB. Request timeout: `stt_server.request_timeout_seconds` (default 1200). **Concurrency: 1** — a long agent job blocks Option+Space until it finishes.
+Every error is JSON in the OpenAI shape. The top-level `detail` repeats `error.message` for clients written against older versions:
+
+```json
+{
+  "error": {
+    "message": "STT busy: another transcription is running",
+    "type": "rate_limit_error",
+    "param": null,
+    "code": "busy"
+  },
+  "detail": "STT busy: another transcription is running"
+}
+```
+
+Clients decide on `status` and `error.code`, never on the message text:
+
+| Status | `code` | Meaning | Client retries? |
+|---|---|---|---|
+| 400 | `invalid_audio` | Empty file, or the audio cannot be decoded | no |
+| 400 | `unsupported_language` | `language` is not a code such as `en` or `auto` (for example `Thai`) | no |
+| 400 | `invalid_request` | Bad `response_format`, `prompt` over 1000 characters, missing `file` | no |
+| 413 | `file_too_large` | Body over `stt_server.max_upload_mb` | no |
+| 413 | `audio_too_long` | Decoded audio over `stt_server.max_audio_seconds` | no |
+| 429 | `busy` | The model was busy for the whole `queue_timeout_seconds`. Has a `Retry-After` header (seconds) | yes, after `Retry-After` |
+| 503 | `model_loading` | The model is still loading. Has a `Retry-After` header | yes, after `Retry-After` |
+| 500 | `model_load_failed` | Loading the model failed. `/healthz` shows `last_error`. The next request tries the load again | no |
+| 500 | `transcription_failed` | The engine raised during inference | no |
+| 504 | `transcription_timeout` | Inference ran past `request_timeout_seconds` | no |
+
+`error.type` is `invalid_request_error` for 4xx (except 429), `rate_limit_error` for 429 and `server_error` for 5xx.
+
+A 504 does not stop the inference: MLX cannot be interrupted, so the job keeps the model until it really finishes. While it runs, new requests wait in the queue and may get `429 busy`. A 500 or 504 means the same file is likely to fail again; show the error and let the user decide.
+
+### Limits and queue
+
+- **Upload size:** `stt_server.max_upload_mb` (default 80). A larger `Content-Length` is rejected with `413` before the body is read. A chunked body is counted while it streams and cut off at the limit. 80 MB is headroom for about 20 minutes of 16 kHz mono 16-bit WAV (~38 MB). It is not a promise that every 20-minute file fits: a 48 kHz PCM WAV can be larger than 80 MB.
+- **Audio length:** `stt_server.max_audio_seconds` (default 1800, 30 minutes). Checked after decoding.
+- **Inference timeout:** `stt_server.request_timeout_seconds` (default 1200). A first model load that runs longer returns `503 model_loading`.
+- **Queue:** one inference at a time, on one dedicated thread that owns the model. A request waits for the model up to `stt_server.queue_timeout_seconds` (default 120), then gets `429 busy` (or `503 model_loading` if the model is still loading). Clips under 60 seconds (dictation) go ahead of longer queued jobs, so Option+Space waits for at most the job already running, not for every agent file in the queue.
+- **Idle unload** never runs while a job is active, including a job whose request already got a 504.
 
 The inference log line is `requested_language=… effective_language=…` (for example `en`/`en`, `auto`/`None`, omitted/`ru`). A log that only says the form field was received does not mean Whisper used it.
 
