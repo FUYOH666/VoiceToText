@@ -41,6 +41,10 @@ final class AppState: ObservableObject {
     @Published var soundsEnabled: Bool {
         didSet { UserDefaults.standard.set(soundsEnabled, forKey: Self.soundsKey) }
     }
+    /// Speak any language, get English (Whisper's translate task).
+    @Published var translateToEnglish: Bool {
+        didSet { UserDefaults.standard.set(translateToEnglish, forKey: Self.translateKey) }
+    }
 
     static let idleSymbol = "waveform"
     static let processingSymbol = "hourglass"
@@ -49,15 +53,28 @@ final class AppState: ObservableObject {
     static let maxRecordingSeconds: TimeInterval = 15 * 60
     static let warnBeforeLimitSeconds: TimeInterval = 60
     private static let soundsKey = "soundsEnabled"
+    private static let translateKey = "translateToEnglish"
 
     var statusLine: String {
         if phase == .idle, status == "Готов", let title = activeModel?.title {
-            return "\(status) · \(title)"
+            return "\(status) · \(title)" + (translationActive ? " · → English" : "")
         }
         return status
     }
 
     var activeModel: ModelInfo? { models.first { $0.active } }
+
+    /// The active model can translate (unknown counts as yes: custom Whisper repos).
+    var activeModelTranslates: Bool { activeModel?.translates ?? true }
+
+    /// Translation is on and the model supports it; otherwise dictation transcribes.
+    var translationActive: Bool { translateToEnglish && activeModelTranslates }
+
+    var translateToggleTitle: String {
+        activeModelTranslates
+            ? "Перевод на английский"
+            : "Перевод на английский (нужен Whisper large-v3)"
+    }
 
     var modelMenuTitle: String {
         "Модель: \(ModelMenu.shortTitle(activeModel))"
@@ -94,6 +111,7 @@ final class AppState: ObservableObject {
         client = STTClient(config: config)
         modelsClient = ModelsClient(config: config)
         soundsEnabled = UserDefaults.standard.object(forKey: Self.soundsKey) as? Bool ?? true
+        translateToEnglish = UserDefaults.standard.bool(forKey: Self.translateKey)
         hotkey.onReleased = { [weak self] in
             Task { @MainActor in self?.hotkeyReleased() }
         }
@@ -285,9 +303,13 @@ final class AppState: ObservableObject {
         status = "Распознаю… (Esc — отмена)"
         hotkey.setEscapeActive(true)
         let client = self.client
+        let translate = translationActive
+        if translate { AppLog.info("dictation mode: translate to English") }
         transcribeTask = Task { [weak self] in
             do {
-                let text = try await client.transcribe(wav: wav, prompt: Glossary.load())
+                let text = try await client.transcribe(
+                    wav: wav, prompt: Glossary.load(), translate: translate
+                )
                 await self?.finish(entryID: entryID, text: text)
             } catch let error as STTClientError {
                 self?.failed(entryID: entryID, error: error)

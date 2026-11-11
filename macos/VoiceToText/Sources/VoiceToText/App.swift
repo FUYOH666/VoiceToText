@@ -42,6 +42,8 @@ struct VoiceToTextApp: App {
                     Text("Память Mac: \(Int(memory.rounded())) ГБ · ★ рекомендуется")
                 }
             }
+            Toggle(state.translateToggleTitle, isOn: $state.translateToEnglish)
+                .disabled(!state.activeModelTranslates && !state.translateToEnglish)
             Button("Словарь терминов…") { state.openGlossary() }
             Divider()
             Button("Копировать текст") { state.copyLastText() }

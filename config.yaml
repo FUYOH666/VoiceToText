@@ -5,7 +5,7 @@
 # Always-on snapshot of the same checkpoint: config.resident.yaml
 
 app:
-  version: "1.7.0"
+  version: "2.2.0"
   name: "VTTv2"
 
 # Локальный STT HTTP (владелец модели). Menubar и агенты — клиенты.

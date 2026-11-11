@@ -4400,7 +4400,7 @@ wheels = [
 
 [[package]]
 name = "vtt-mlx-m4"
-version = "1.7.0"
+version = "2.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "coloredlogs" },

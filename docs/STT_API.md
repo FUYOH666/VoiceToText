@@ -40,6 +40,7 @@ uv run python src/vtt2/main.py --install
 | `GET` | `/healthz` | Process alive (`200`). Includes `ready`, `loading`, `last_error`, `active_jobs`, `queued`, `idle_unload_seconds` |
 | `GET` | `/readyz` | Model loaded (`200`); else `503` (idle / not yet loaded / loading) |
 | `POST` | `/v1/audio/transcriptions` | Transcribe; **loads model on demand** if unloaded |
+| `POST` | `/v1/audio/translations` | Speech in any language → English text (Whisper's translate task). Same fields as transcriptions except timestamps; `language` is the optional source hint. Models that can't translate (Qwen3-ASR, Whisper turbo) return `400 translation_unsupported` |
 | `GET` | `/v1/models` | Model catalog: installed, active, recommended for this Mac's memory |
 | `POST` | `/v1/models/{id}/download` | Start a background download (`202`); dictation keeps working |
 | `GET` | `/v1/models/{id}/download` | Download progress |

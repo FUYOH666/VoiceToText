@@ -8,7 +8,7 @@
 # so the process does not quantize it again. Not an mlx-community / mlx-audio quant.
 
 app:
-  version: "1.7.0"
+  version: "2.2.0"
   name: "VTTv2"
 
 # Локальный STT HTTP. Этот профиль грузит Qwen3-ASR. Menubar по-прежнему клиент.

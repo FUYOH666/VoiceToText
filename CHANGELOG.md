@@ -1,19 +1,64 @@
 # Changelog
 
-## [Unreleased]
+## [2.2.0] - 2026-11-11
 
-The next release will be **v2.2.0**, so its tag sorts after `v2.1.1` from the archived old line.
+The first release after a full engineering review ([docs/ROADMAP.md](docs/ROADMAP.md)). The version jumps from 1.7.0 so the tag sorts after `v2.1.1` from the archived old line.
+
+### Highlights
+- **Install in one command:** `curl -fsSL https://raw.githubusercontent.com/FUYOH666/VoiceToText/main/scripts/install.sh | bash`. Everything is built on your Mac, so no Developer ID or notarization is needed.
+- **Choose a model in the menu.** Verified MLX checkpoints are listed, quantized first, with a recommendation for your Mac's memory. Models download in the background, and you can add your own from Hugging Face.
+- **Speak any language, get English.** «Перевод на английский» uses Whisper's built-in translation (`POST /v1/audio/translations`).
+- **Push-to-talk:** hold Option+Space, speak, let go. A tap still toggles.
+- **Nothing is lost:** every recording is saved before it is sent, and the menu has History and Retry. Esc cancels.
+- **Whisper without loops:** the decoder can recover from repetition, silence is trimmed, and repeats are collapsed. Real words are no longer cut by the artifact filter.
 
 ### Added
-- CI on macOS arm64 (`.github/workflows/ci.yml`): secret and personal-path scan, `uv lock --check`, version sync check, pytest, Swift tests, app build, and a `minos 13.0` check on the built binary.
-- `scripts/sync_version.py`: `pyproject.toml` is the single source of the version. It writes `CFBundleShortVersionString` and `CFBundleVersion` in `Info.plist`, `app.version` in `config*.yaml` and `vtt2.__version__`. `--check` fails if any copy differs.
-- Issue and pull request templates. [`docs/ROADMAP.md`](docs/ROADMAP.md): engineering review and roadmap.
-- Optional STT engine `qwen3_asr` via extra `qwen` (`mlx-qwen3-asr`). The profile loads pre-quantized `moona3k/mlx-qwen3-asr-1.7b-8bit` with `quantization_bits: null` (no second quantize pass; not an mlx-community checkpoint). The menubar items Whisper and Qwen rewrite `stt_server.engine` and restart only the STT process. One model in memory. If the extra is missing, the menu leaves the config alone and startup exits with `uv sync --extra qwen`. There is no fallback to Whisper.
-- Local code signing identity `vtt-local-codesign` (`macos/scripts/setup-local-signing.sh`). `build.sh` uses it when present, so Accessibility and Input Monitoring survive a rebuild. The first rebuild after ad-hoc still needs one grant.
+- `POST /v1/audio/translations` (OpenAI-compatible), for Whisper models that translate well (large-v3, large-v3 8-bit, small). Other models return `400 translation_unsupported`. The catalog has a `translates` flag.
+- Model catalog (`src/vtt2/model_catalog/catalog.yaml`) and API:
+  - `GET /v1/models`;
+  - `POST|GET /v1/models/{id}/download`;
+  - `POST /v1/models/{id}/activate`;
+  - `DELETE /v1/models/{id}`;
+  - `POST /v1/models/custom`.
+
+  The choice is stored in `~/Library/Application Support/VoiceToText/config.yaml`, layered over the repo config.
+- The menu bar app gained:
+  - «Модель ▸» with sizes, ★ for the recommended model and background download with progress;
+  - «Перевод на английский»;
+  - «Словарь терминов…», which sends your terms as the `prompt`;
+  - History and «Повторить последнюю запись»;
+  - push-to-talk, Esc to cancel, a sound toggle, and status icons for processing and errors.
+- `scripts/install.sh`, `scripts/uninstall.sh` (it only removes services owned by its own copy) and `scripts/prefetch_model.py`.
+- An inference worker owns all model access:
+  - a slot is freed only when inference has really finished;
+  - dictation gets priority over long files;
+  - error bodies have the OpenAI shape;
+  - 429/503 carry `Retry-After`;
+  - there is an early body-size limit and `max_audio_seconds`.
+- CI on macOS arm64 (secret/path scan, lock check, version sync, pytest, Swift tests, build, minos check). `scripts/sync_version.py` keeps one version everywhere.
 
 ### Changed
-- The app bundle version and `vtt2.__version__` follow `pyproject.toml` (1.7.0). They said 1.5.1 and 1.0.0.
-- Default `config.yaml` and `config.resident.yaml` use `qwen3_asr` (`moona3k/mlx-qwen3-asr-1.7b-8bit`). Whisper remains the menu switch. A fresh install needs `uv sync --extra qwen`.
+- The app builds for macOS 13+ (`minos 13.0`; it said 27.0 before). Input Monitoring is no longer requested; only Microphone and Accessibility are needed.
+- Whisper decoding:
+  - temperature fallback is on;
+  - `condition_on_previous_text=false`;
+  - leading and trailing silence is trimmed before decoding, and timecodes are kept on the original timeline;
+  - repetition loops are collapsed.
+- The clipboard is restored after a paste. Nothing is pasted into password fields (secure input). The dictated text is marked transient so clipboard managers skip it.
+- The client retries only `429` and `503 model_loading`, for at most 180 s. `/healthz` gives up after 3 s, and other errors fail at once with a readable status.
+- Cached models load from disk without contacting huggingface.co. `release()` on idle unload frees MLX Whisper memory.
+- `VTT2_*` environment overrides resolve against the config schema (`VTT2_STT_SERVER_PORT` works; `__` splits levels explicitly).
+- The menu bar icon no longer changes while recording; macOS's orange microphone indicator shows that.
+
+### Fixed
+- The artifact filter deleted real words at the end of a segment (for example "…приехала полиция" became "…приехала") for every engine. It now runs only for Whisper, and short phrases are removed only when they are a whole line or segment.
+- Undecodable uploads returned 500 instead of 400.
+- On long recordings with pauses, Whisper silently dropped whole stretches of speech.
+- Several races: a timed-out request released the model while inference was still running, and the idle unloader could release the model mid-job.
+- `.python-version` is tracked, so a fresh `uv sync` uses Python 3.12. It picked 3.14 before, and llvmlite failed to build.
+
+### Removed
+- The Whisper/Qwen menu switch, which rewrote the git-tracked `config.yaml` (replaced by «Модель ▸»).
 
 ## [1.7.0] - 2026-10-06
 

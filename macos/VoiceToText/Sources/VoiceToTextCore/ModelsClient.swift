@@ -17,9 +17,11 @@ public struct ModelInfo: Codable, Equatable, Sendable, Identifiable {
     public let fitsMemory: Bool
     public let custom: Bool?
     public let download: DownloadStatus?
+    /// Whisper's speech → English translation works well with this model.
+    public let translates: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, family, repo, quantization, note, installed, active, recommended, custom, download
+        case id, title, family, repo, quantization, note, installed, active, recommended, custom, download, translates
         case downloadGB = "download_gb"
         case ramGB = "ram_gb"
         case minMemoryGB = "min_memory_gb"
@@ -30,7 +32,8 @@ public struct ModelInfo: Codable, Equatable, Sendable, Identifiable {
         id: String, title: String, family: String? = nil, repo: String? = nil,
         quantization: String? = nil, downloadGB: Double? = nil, ramGB: Double? = nil,
         minMemoryGB: Double? = nil, note: String? = nil, installed: Bool, active: Bool,
-        recommended: Bool, fitsMemory: Bool, custom: Bool? = nil, download: DownloadStatus? = nil
+        recommended: Bool, fitsMemory: Bool, custom: Bool? = nil, download: DownloadStatus? = nil,
+        translates: Bool? = nil
     ) {
         self.id = id
         self.title = title
@@ -47,6 +50,7 @@ public struct ModelInfo: Codable, Equatable, Sendable, Identifiable {
         self.fitsMemory = fitsMemory
         self.custom = custom
         self.download = download
+        self.translates = translates
     }
 }
 

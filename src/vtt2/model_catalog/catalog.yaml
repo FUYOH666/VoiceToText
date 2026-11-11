@@ -8,6 +8,7 @@
 # verified_revision: the Hugging Face commit checked when the entry was added.
 #
 # Families: qwen3_asr (mlx-qwen3-asr) and mlx_whisper (mlx-whisper).
+# translates: true = Whisper's speech → English translation works well with this model.
 
 # First rule whose min_memory_gb <= installed RAM picks the recommended model.
 recommended:
@@ -81,6 +82,7 @@ models:
     title: "Whisper large-v3 · 8-bit"
     family: mlx_whisper
     repo: mlx-community/whisper-large-v3-mlx-8bit
+    translates: true
     verified_revision: 04ca5b03c22d72ddf4f4b2d808a28bf9902fb71a
     quantization: 8bit
     download_gb: 1.71
@@ -93,6 +95,7 @@ models:
     title: "Whisper large-v3"
     family: mlx_whisper
     repo: mlx-community/whisper-large-v3-mlx
+    translates: true
     verified_revision: 49e6aa286ad60c14352c404340ded53710378a11
     quantization: fp16
     download_gb: 3.08
@@ -105,6 +108,7 @@ models:
     title: "Whisper small"
     family: mlx_whisper
     repo: mlx-community/whisper-small-mlx
+    translates: true
     verified_revision: 45f3915923c7a79a5a5b5a7d909d39aeb0e5630e
     quantization: fp16
     download_gb: 0.48

@@ -649,8 +649,11 @@ class TestSTTServerConfig:
             )
 
     def test_default_config_yaml_loads(self, project_root):
+        import tomllib
+
         cfg = Config.from_yaml(str(project_root / "config.yaml"), project_root)
-        assert cfg.app.version == "1.7.0"
+        pyproject = tomllib.loads((project_root / "pyproject.toml").read_text(encoding="utf-8"))
+        assert cfg.app.version == pyproject["project"]["version"]
         assert cfg.stt_server.max_upload_mb == 80
         assert cfg.stt_server.request_timeout_seconds == 1200
         assert cfg.stt_server.queue_timeout_seconds == 120

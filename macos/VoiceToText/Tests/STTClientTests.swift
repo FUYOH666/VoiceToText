@@ -199,3 +199,49 @@ func runRetryPolicyTests() {
     let legacy = RetryPolicy.parseError(Data(#"{"detail":"d"}"#.utf8))
     expect(legacy.code == nil && legacy.message == "d", "parse legacy detail")
 }
+
+func runTranslationClientTests() async {
+    // translate: true goes to /v1/audio/translations.
+    MockURLProtocol.reset()
+    MockURLProtocol.handler = { request in
+        if request.url?.path.hasSuffix("healthz") == true { return (200, Data(#"{}"#.utf8)) }
+        return (200, Data(#"{"text":"Hello"}"#.utf8))
+    }
+    do {
+        let text = try await makeClient().transcribe(wav: Data([1]), translate: true)
+        let post = MockURLProtocol.requests.last { $0.httpMethod == "POST" }
+        expect(text == "Hello", "translation text")
+        expect(post?.url?.path == "/v1/audio/translations", "translation path, got \(post?.url?.path ?? "")")
+    } catch {
+        expect(false, "translate threw \(error)")
+    }
+    // A model that can't translate is a clear, non-retried error.
+    await expectTranslationUnsupported()
+    // Decoding the catalog flag.
+    let json = #"{"id":"w","title":"W","installed":true,"active":true,"recommended":false,"fits_memory":true,"translates":true}"#
+    let model = try? JSONDecoder().decode(ModelInfo.self, from: Data(json.utf8))
+    expect(model?.translates == true, "translates decoded")
+}
+
+func expectTranslationUnsupported() async {
+    MockURLProtocol.reset()
+    let posts = LockBox(0)
+    MockURLProtocol.handler = { request in
+        if request.url?.path.hasSuffix("healthz") == true { return (200, Data(#"{}"#.utf8)) }
+        _ = posts.increment()
+        return (400, Data(#"{"error":{"message":"needs Whisper","code":"translation_unsupported"}}"#.utf8))
+    }
+    do {
+        _ = try await makeClient().transcribe(wav: Data([1]), translate: true)
+        expect(false, "unsupported translation should throw")
+    } catch let error as STTClientError {
+        if case .translationUnsupported = error {
+            expect(error.userMessage.contains("Whisper large-v3"), "unsupported message: \(error.userMessage)")
+        } else {
+            expect(false, "expected translationUnsupported, got \(error)")
+        }
+        expect(posts.value == 1, "not retried")
+    } catch {
+        expect(false, "unsupported unexpected \(error)")
+    }
+}

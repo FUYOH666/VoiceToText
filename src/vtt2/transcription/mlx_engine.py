@@ -236,9 +236,13 @@ class MLXWhisperTranscriber:
         language: object = _CONFIG_LANGUAGE,
         requested_language: Optional[str] = None,
         initial_prompt: Optional[str] = None,
+        task: str = "transcribe",
     ) -> dict:
         """
         Full native mlx_whisper decode with segment (and optional word) timestamps.
+
+        ``task="translate"`` returns English text for speech in any language
+        (Whisper's built-in translation); ``language`` is then the source.
 
         Do not use transcribe_long_audio here — custom chunk merge drops timings.
         Whisper already windows ~30s internally with correct offsets. Use this for
@@ -260,8 +264,9 @@ class MLXWhisperTranscriber:
             raise TypeError("language must be a code, None, or omitted")
         prompt = (initial_prompt or "").strip() or None
         logger.info(
-            "MLX detailed transcribe: %.1fs audio word_timestamps=%s "
+            "MLX detailed %s: %.1fs audio word_timestamps=%s "
             "requested_language=%s effective_language=%s",
+            task,
             duration,
             word_timestamps,
             requested_label,
@@ -294,6 +299,7 @@ class MLXWhisperTranscriber:
                 language=effective_language,
                 initial_prompt=prompt,
                 word_timestamps=word_timestamps,
+                task=task,
                 verbose=False,
                 **self._decode_options(word_timestamps=word_timestamps),
             )

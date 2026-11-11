@@ -32,6 +32,7 @@ MODEL_NOT_INSTALLED = "model_not_installed"
 MODEL_ACTIVE = "model_active"
 MODEL_DOWNLOADING = "model_downloading"
 UNSUPPORTED_MODEL = "unsupported_model"
+TRANSLATION_UNSUPPORTED = "translation_unsupported"
 
 RETRY_AFTER_BUSY_SECONDS = 5
 RETRY_AFTER_LOADING_SECONDS = 2
