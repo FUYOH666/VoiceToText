@@ -62,11 +62,35 @@ class MLXWhisperTranscriber:
         
         self._model_cache = None
         self._transcription_count = 0
-        
+        self._resolved_model_source: Optional[str] = None
+
         logger.info("MLXWhisperTranscriber инициализирован")
         logger.info(f"Модель MLX: {self.mlx_config.model_name}")
         logger.info(f"Параметры длинных записей: chunk_size={self.chunk_size_seconds}s, overlap={self.chunk_overlap_seconds}s, batch_size={self.batch_size}")
-    
+
+    def _model_source(self) -> str:
+        """Local snapshot dir when the model is cached (no network), else the repo id."""
+        if self._resolved_model_source is None:
+            from transcription.hf_cache import resolve_cached_snapshot
+
+            source = resolve_cached_snapshot(self.mlx_config.model_name)
+            if source == self.mlx_config.model_name:
+                # Not cached yet: mlx_whisper downloads it now; resolve again next time.
+                return source
+            self._resolved_model_source = source
+        return self._resolved_model_source
+
+    def release(self) -> None:
+        """Drop mlx_whisper's process-wide model so idle unload frees the weights."""
+        self._model_cache = None
+        try:
+            from mlx_whisper.transcribe import ModelHolder
+
+            ModelHolder.model = None
+            ModelHolder.model_path = None
+        except Exception:
+            logger.debug("mlx_whisper ModelHolder clear skipped", exc_info=True)
+
     def _check_dependencies(self):
         """Проверка наличия MLX зависимостей"""
         if not MLX_WHISPER_AVAILABLE:
@@ -198,7 +222,7 @@ class MLXWhisperTranscriber:
 
             result = whisper.transcribe(
                 audio_data,
-                path_or_hf_repo=self.mlx_config.model_name,
+                path_or_hf_repo=self._model_source(),
                 language=effective_language,
                 initial_prompt=prompt,
                 temperature=self.mlx_config.temperature,
@@ -296,7 +320,7 @@ class MLXWhisperTranscriber:
             logger.debug(f"Загрузка модели из кэша: {self.mlx_config.model_name}")
             result = whisper.transcribe(
                 audio_data,
-                path_or_hf_repo=self.mlx_config.model_name,
+                path_or_hf_repo=self._model_source(),
                 language=language_param,  # None для автоопределения
                 temperature=self.mlx_config.temperature,
                 compression_ratio_threshold=self.mlx_config.compression_ratio_threshold,
@@ -494,7 +518,7 @@ class MLXWhisperTranscriber:
                 logger.debug(f"  Обработка чанка {idx+1}/{len(batch_chunks)} ({chunk_duration:.1f}s)...")
                 result = whisper.transcribe(
                     chunk,
-                    path_or_hf_repo=self.mlx_config.model_name,
+                    path_or_hf_repo=self._model_source(),
                     language=language_param,  # None для автоопределения
                     temperature=self.mlx_config.temperature,
                     compression_ratio_threshold=self.mlx_config.compression_ratio_threshold,

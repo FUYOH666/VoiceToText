@@ -232,3 +232,35 @@ class TestTranscriptionEngineWrapper:
             {"id": 0, "start": 0.0, "end": 1.0, "text": "hello"}
         ]
 
+
+
+class TestMLXWhisperRelease:
+    """Idle unload must actually drop mlx_whisper's process-wide model."""
+
+    def test_release_clears_model_holder(self):
+        from mlx_whisper.transcribe import ModelHolder
+        from transcription.mlx_engine import MLXWhisperTranscriber
+
+        ModelHolder.model = object()
+        ModelHolder.model_path = "/cache/whisper"
+        transcriber = MLXWhisperTranscriber.__new__(MLXWhisperTranscriber)
+        transcriber._model_cache = None
+        transcriber.release()
+        assert ModelHolder.model is None
+        assert ModelHolder.model_path is None
+
+    def test_model_source_prefers_cached_snapshot(self, monkeypatch):
+        from transcription.mlx_engine import MLXWhisperTranscriber
+
+        transcriber = MLXWhisperTranscriber.__new__(MLXWhisperTranscriber)
+        transcriber.mlx_config = Mock(model_name="mlx-community/whisper-large-v3-mlx")
+        transcriber._resolved_model_source = None
+        monkeypatch.setattr(
+            "transcription.hf_cache.resolve_cached_snapshot", lambda name: name
+        )
+        # Not cached yet: repo id, and it will be resolved again next time.
+        assert transcriber._model_source() == "mlx-community/whisper-large-v3-mlx"
+        monkeypatch.setattr(
+            "transcription.hf_cache.resolve_cached_snapshot", lambda name: f"/cache/{name}"
+        )
+        assert transcriber._model_source() == "/cache/mlx-community/whisper-large-v3-mlx"

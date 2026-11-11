@@ -313,6 +313,82 @@ class TestSTTServerAPI:
         assert [s["text"] for s in body["segments"]] == ["нормальная фраза", "конец"]
         assert body["text"] == "нормальная фраза конец"
 
+    def test_real_word_at_segment_end_survives(self, mock_ready_app):
+        client, mock_engine = mock_ready_app
+        mock_engine.transcribe_detailed.return_value = _detailed_payload(
+            "К дому приехала полиция"
+        )
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+        )
+        assert r.status_code == 200
+        assert r.json()["text"] == "К дому приехала полиция"
+
+    def test_engine_text_kept_when_nothing_stripped(self, mock_ready_app):
+        # Thai joins words without spaces; rebuilding text from segments would add them.
+        client, mock_engine = mock_ready_app
+        mock_engine.transcribe_detailed.return_value = _detailed_payload(
+            "สวัสดีครับผม",
+            language="th",
+            segments=[
+                {"id": 0, "start": 0.0, "end": 0.5, "text": "สวัสดีครับ"},
+                {"id": 1, "start": 0.5, "end": 1.0, "text": "ผม"},
+            ],
+        )
+        r = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+            data={"response_format": "verbose_json"},
+        )
+        assert r.status_code == 200
+        assert r.json()["text"] == "สวัสดีครับผม"
+
+    def test_qwen_engine_output_is_never_filtered(self):
+        config = _minimal_config(
+            stt_server={
+                "host": "127.0.0.1",
+                "port": 8765,
+                "max_upload_mb": 1,
+                "request_timeout_seconds": 60,
+                "engine": "qwen3_asr",
+                "preload_on_start": True,
+                "idle_unload_seconds": 0,
+            }
+        )
+        engine = _mock_engine()
+        engine.transcribe_detailed.return_value = _detailed_payload(
+            "Это вызвало смех. Thank you.",
+            segments=[
+                {"id": 0, "start": 0.0, "end": 1.0, "text": "Это вызвало смех."},
+                {"id": 1, "start": 1.0, "end": 2.0, "text": "Thank you."},
+            ],
+        )
+        with patch("stt_server.TranscriptionEngineWrapper", return_value=engine):
+            with patch("stt_server._warmup", return_value=None):
+                with TestClient(create_app(config)) as client:
+                    r = client.post(
+                        "/v1/audio/transcriptions",
+                        files={"file": ("a.wav", _wav_bytes(), "audio/wav")},
+                        data={"response_format": "verbose_json"},
+                    )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["text"] == "Это вызвало смех. Thank you."
+        assert [s["text"] for s in body["segments"]] == ["Это вызвало смех.", "Thank you."]
+
+    def test_undecodable_compressed_upload_is_400_not_500(self, mock_ready_app):
+        # Before: with no ffmpeg reachable (launchd PATH), soundfile's raw
+        # LibsndfileError escaped and the client got a 500.
+        client, _ = mock_ready_app
+        with patch("audio.decode._find_ffmpeg", return_value=None):
+            r = client.post(
+                "/v1/audio/transcriptions",
+                files={"file": ("voice.m4a", b"definitely not audio", "audio/mp4")},
+            )
+        assert r.status_code == 400
+        assert "декодировать" in r.json()["detail"]
+
     def test_transcriptions_413_too_large(self, mock_ready_app):
         client, _ = mock_ready_app
         huge = b"RIFF" + b"x" * (2 * 1024 * 1024)
