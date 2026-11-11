@@ -112,7 +112,9 @@ public struct STTClient: Sendable {
 
     /// Transcribe WAV. Retries only what the server marks as temporary, and stops
     /// as soon as the surrounding Task is cancelled.
-    public func transcribe(wav: Data) async throws -> String {
+    /// `prompt` (optional) goes out as the OpenAI `prompt` field: Whisper's initial
+    /// prompt / Qwen's context. The app fills it from the user's glossary.
+    public func transcribe(wav: Data, prompt: String? = nil) async throws -> String {
         try checkCancelled()
         _ = try await health()
 
@@ -123,7 +125,7 @@ public struct STTClient: Sendable {
         while true {
             try checkCancelled()
             attempt += 1
-            let request = try multipartRequest(url: url, wav: wav)
+            let request = try multipartRequest(url: url, wav: wav, prompt: prompt)
             let (data, http) = try await send(request)
             if http.statusCode == 200 {
                 return try Self.parseText(data)
@@ -216,12 +218,18 @@ public struct STTClient: Sendable {
         }
     }
 
-    private func multipartRequest(url: URL, wav: Data) throws -> URLRequest {
+    func multipartRequest(url: URL, wav: Data, prompt: String? = nil) throws -> URLRequest {
         let boundary = "vtt-\(UUID().uuidString)"
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         var body = Data()
+        if let prompt, !prompt.isEmpty {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"prompt\"\r\n\r\n".data(using: .utf8)!)
+            body.append(prompt.data(using: .utf8)!)
+            body.append("\r\n".data(using: .utf8)!)
+        }
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append(
             "Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!

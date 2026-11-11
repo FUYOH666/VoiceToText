@@ -40,7 +40,7 @@ That starts two LaunchAgents: `ai.vtt2.stt` (model + HTTP on `127.0.0.1:8765`) a
 
 Grant **Microphone** and **Accessibility** to **VoiceToText** — not Terminal, not python. Input Monitoring is not needed.
 
-Option+Space starts and stops a dictation; Esc cancels it. Every recording is saved to `~/Library/Application Support/VoiceToText/recordings/` before it is sent (last 50, 7 days), so nothing is lost if the server fails: menu «Повторить последнюю запись» or «История». Your clipboard is restored after the paste, and nothing is pasted into password fields.
+Hold Option+Space while you speak and let go to paste (push-to-talk), or tap it once to start and once more to stop; Esc cancels. Menu «Словарь терминов…» opens `~/Library/Application Support/VoiceToText/glossary.txt`: one name or term per line (Claude Code, Hugging Face, MLX…); they are sent with every dictation so the model spells them your way. Every recording is saved to `~/Library/Application Support/VoiceToText/recordings/` before it is sent (last 50, 7 days), so nothing is lost if the server fails: menu «Повторить последнюю запись» or «История». Your clipboard is restored after the paste, and nothing is pasted into password fields.
 
 After an ad-hoc rebuild, macOS treats the binary as a new app: remove the old VoiceToText row in Privacy, add `macos/dist/VoiceToText.app` again, turn the toggles on.
 

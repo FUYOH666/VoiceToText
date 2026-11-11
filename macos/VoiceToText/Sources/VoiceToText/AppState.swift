@@ -82,13 +82,22 @@ final class AppState: ObservableObject {
     private var limitTimers: [Timer] = []
     private var modelsTimer: Timer?
     private var errorReset: Task<Void, Never>?
+    /// Option+Space is physically down (guards against key repeat).
+    private var hotkeyDown = false
+    /// Set when a press started the recording; a long hold ends it on release.
+    private var holdStartedAt: Date?
+    /// Held at least this long = push-to-talk (release stops). Shorter = tap to toggle.
+    static let pushToTalkThreshold: TimeInterval = 0.5
 
     init(config: AppConfig = AppConfig.load()) {
         client = STTClient(config: config)
         modelsClient = ModelsClient(config: config)
         soundsEnabled = UserDefaults.standard.object(forKey: Self.soundsKey) as? Bool ?? true
+        hotkey.onReleased = { [weak self] in
+            Task { @MainActor in self?.hotkeyReleased() }
+        }
         hotkey.onPressed = { [weak self] in
-            Task { @MainActor in self?.toggle() }
+            Task { @MainActor in self?.hotkeyPressed() }
         }
         hotkey.onEscape = { [weak self] in
             Task { @MainActor in self?.cancel() }
@@ -115,6 +124,40 @@ final class AppState: ObservableObject {
     // MARK: - Dictation
 
     /// Hotkey: start → stop and transcribe → (while processing) cancel. Never ignored.
+    /// Two ways to dictate with one hotkey:
+    /// hold Option+Space while speaking and let go (push-to-talk), or tap it
+    /// once to start and once more to stop.
+    func hotkeyPressed() {
+        guard !hotkeyDown else { return }
+        hotkeyDown = true
+        if phase == .idle {
+            startRecording()
+            holdStartedAt = phase == .recording ? Date() : nil
+        } else {
+            holdStartedAt = nil
+            toggle()
+        }
+    }
+
+    func hotkeyReleased() {
+        hotkeyDown = false
+        guard let started = holdStartedAt else { return }
+        holdStartedAt = nil
+        if phase == .recording, Date().timeIntervalSince(started) >= Self.pushToTalkThreshold {
+            AppLog.info("push-to-talk: released after \(String(format: "%.1f", Date().timeIntervalSince(started)))s")
+            stopAndTranscribe()
+        }
+    }
+
+    func openGlossary() {
+        do {
+            let url = try Glossary.ensureFile()
+            NSWorkspace.shared.open(url)
+        } catch {
+            presentAlert(title: "Словарь", message: "Не удалось создать файл словаря: \(error.localizedDescription)")
+        }
+    }
+
     func toggle() {
         switch phase {
         case .idle: startRecording()
@@ -243,7 +286,7 @@ final class AppState: ObservableObject {
         let client = self.client
         transcribeTask = Task { [weak self] in
             do {
-                let text = try await client.transcribe(wav: wav)
+                let text = try await client.transcribe(wav: wav, prompt: Glossary.load())
                 await self?.finish(entryID: entryID, text: text)
             } catch let error as STTClientError {
                 self?.failed(entryID: entryID, error: error)
