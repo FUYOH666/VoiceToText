@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-time login-keychain identity. Daily build.sh signs with it, so the
 # designated requirement stays the same across rebuilds and TCC keeps
-# Accessibility and Input Monitoring. The private key never leaves the keychain.
+# Microphone and Accessibility. The private key never leaves the keychain.
 set -euo pipefail
 
 IDENTITY="${VTT2_LOCAL_SIGN_IDENTITY:-vtt-local-codesign}"
@@ -40,8 +40,11 @@ EOF
     -config "$TMP/cert.conf" >/dev/null 2>&1
 
   P12_PASS="$(openssl rand -hex 16)"
-  # -legacy: login keychain still imports the older PKCS#12 algorithms.
-  openssl pkcs12 -export -legacy \
+  # The login keychain imports only the older PKCS#12 algorithms (3DES, SHA-1 MAC).
+  # Name them explicitly: OpenSSL 3 defaults to AES, and macOS /usr/bin/openssl
+  # (LibreSSL) has no -legacy flag. These flags work with both.
+  openssl pkcs12 -export \
+    -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 \
     -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
     -out "$TMP/cert.p12" -passout "pass:${P12_PASS}"
 
