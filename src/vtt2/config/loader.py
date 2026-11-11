@@ -178,6 +178,18 @@ class STTServerConfig(BaseModel):
     request_timeout_seconds: int = Field(
         1200, ge=30, le=3600, description="Таймаут обработки одного запроса"
     )
+    queue_timeout_seconds: float = Field(
+        120,
+        ge=0,
+        le=3600,
+        description="Сколько запрос ждёт занятую модель в очереди, затем 429 busy",
+    )
+    max_audio_seconds: int = Field(
+        1800,
+        ge=1,
+        le=86400,
+        description="Максимальная длительность аудио после декодирования (секунды), иначе 413",
+    )
     engine: Literal["mlx_whisper", "whisper_cpp", "qwen3_asr"] = Field(
         "mlx_whisper",
         description="Движок, который грузит STT-сервер (не local_stt/remote_asr)",

@@ -653,6 +653,8 @@ class TestSTTServerConfig:
         assert cfg.app.version == "1.7.0"
         assert cfg.stt_server.max_upload_mb == 80
         assert cfg.stt_server.request_timeout_seconds == 1200
+        assert cfg.stt_server.queue_timeout_seconds == 120
+        assert cfg.stt_server.max_audio_seconds == 1800
         assert cfg.transcription.engine == "local_stt"
         assert cfg.stt_server.engine == "qwen3_asr"
         assert cfg.stt_server.port == 8765

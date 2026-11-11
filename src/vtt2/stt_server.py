@@ -3,7 +3,8 @@ Local OpenAI-compatible STT HTTP API.
 
 Owns one ASR model in one process (default qwen3_asr; Whisper is a menu switch).
 Menubar and agents are clients.
-Bind: loopback only. Concurrency: 1.
+Bind: loopback only. Concurrency: 1 — every model call runs on one worker
+thread (server.worker); errors follow the contract in docs/STT_API.md.
 
 Profiles:
 - preload_on_start=true, idle_unload_seconds=0 → resident (config.resident.yaml)
@@ -21,18 +22,32 @@ from typing import Any, Optional
 
 import numpy as np
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from audio.decode import AudioDecodeError, decode_audio_bytes
 from audio.processor import AudioProcessor
 from config.loader import Config
+from server import errors as err
+from server.errors import APIError, install_error_handlers
+from server.limits import BodySizeLimitMiddleware
+from server.worker import (
+    PRIORITY_INTERACTIVE,
+    InferenceWorker,
+    JobTimeoutError,
+    Lease,
+    QueueTimeoutError,
+    priority_for,
+)
 from transcription.engine import TranscriptionEngineWrapper
 from transcription.request_language import RejectedLanguage, resolve_request_language
 
 logger = logging.getLogger(__name__)
 
 PROMPT_MAX_CHARS = 1000
+# Multipart boundaries and form fields on top of the file itself.
+MULTIPART_OVERHEAD_BYTES = 64 * 1024
+IDLE_CHECK_INTERVAL_SECONDS = 15
 
 
 class STTState:
@@ -45,7 +60,7 @@ class STTState:
         self.config: Optional[Config] = None
         self.engine: Optional[TranscriptionEngineWrapper] = None
         self.processor: Optional[AudioProcessor] = None
-        self.lock = asyncio.Lock()
+        self.worker: Optional[InferenceWorker] = None
         self.model_name: str = ""
         self.last_used_at: float = 0.0
         self.idle_task: Optional[asyncio.Task] = None
@@ -202,60 +217,118 @@ def _unload_model_sync() -> None:
     logger.info("STT model unloaded (idle)")
 
 
-async def _ensure_model_loaded(config: Config) -> None:
-    """Load model if needed. Caller must hold state.lock."""
-    if state.ready and state.engine is not None and state.processor is not None:
-        return
-    state.loading = True
-    state.warmup_error = None
+def _request_timeout(config: Config) -> float:
+    """Inference (and on-demand load) timeout in seconds. A seam for tests."""
+    return float(config.stt_server.request_timeout_seconds)
+
+
+def _model_ready() -> bool:
+    return state.ready and state.engine is not None and state.processor is not None
+
+
+def _load_model_job(config: Config) -> None:
+    """Worker-thread job: load + warmup. Records the error for /healthz."""
     try:
-        logger.info("STT loading model on demand…")
-        await asyncio.to_thread(_load_model_sync, config)
+        _load_model_sync(config)
     except Exception as e:
         state.ready = False
         state.engine = None
         state.processor = None
         state.warmup_error = str(e)
         logger.exception("STT model load failed: %s", e)
-        raise HTTPException(
-            status_code=503,
-            detail=f"STT model load failed: {e}",
-        ) from e
+        raise
     finally:
         state.loading = False
+
+
+async def _ensure_model_loaded(lease: Lease, config: Config, timeout: Optional[float]) -> None:
+    """Load the model on the worker thread if needed. Caller holds ``lease``."""
+    if _model_ready():
+        return
+    state.loading = True
+    state.warmup_error = None
+    logger.info("STT loading model on demand…")
+    try:
+        await lease.run(_load_model_job, config, timeout=timeout, kind="load")
+    except JobTimeoutError as e:
+        # The load goes on in the background and keeps the slot; retrying is right.
+        raise APIError(
+            503,
+            err.MODEL_LOADING,
+            "STT model is still loading; retry shortly",
+            retry_after=err.RETRY_AFTER_LOADING_SECONDS,
+        ) from e
+    except Exception as e:
+        raise APIError(500, err.MODEL_LOAD_FAILED, f"STT model load failed: {e}") from e
+
+
+def _transcribe_job(
+    audio: np.ndarray,
+    *,
+    sample_rate: int,
+    want_words: bool,
+    language: Optional[str],
+    requested_language: str,
+    initial_prompt: Optional[str],
+) -> tuple[dict, float]:
+    """Worker-thread job: prepare audio and run the engine. Returns (payload, seconds)."""
+    engine, processor = state.engine, state.processor
+    if engine is None or processor is None:
+        raise RuntimeError("STT model is not loaded")
+    state.last_used_at = time.time()
+    try:
+        prepared = processor.prepare_for_whisper(audio)
+        duration_s = len(prepared) / float(sample_rate)
+        if duration_s >= 60:
+            logger.info("STT long job: %.1fs audio (concurrency=1)", duration_s)
+        payload = engine.transcribe_detailed(
+            prepared,
+            word_timestamps=want_words,
+            language=language,
+            requested_language=requested_language,
+            initial_prompt=initial_prompt,
+        )
+        return payload or {}, duration_s
+    finally:
+        state.last_used_at = time.time()
+
+
+async def _idle_unload_once() -> bool:
+    """One idle-unload check. True if the model was unloaded."""
+    cfg, worker = state.config, state.worker
+    if cfg is None or worker is None:
+        return False
+    idle_after = cfg.stt_server.idle_unload_seconds
+    if idle_after <= 0 or not state.ready or state.engine is None or state.loading:
+        return False
+    # A job whose request already got a 504 still counts: MLX is still using the model.
+    if worker.active_jobs > 0 or worker.busy:
+        return False
+    if time.time() - state.last_used_at < idle_after:
+        return False
+    lease = worker.try_acquire()
+    if lease is None:
+        return False
+    try:
+        if not state.ready or time.time() - state.last_used_at < idle_after:
+            return False
+        logger.info(
+            "STT idle %.0fs >= %ss — unloading model",
+            time.time() - state.last_used_at,
+            idle_after,
+        )
+        await lease.run(_unload_model_sync, kind="unload")
+        return True
+    finally:
+        lease.close()
 
 
 async def _idle_unload_loop() -> None:
     """Background: unload weights after idle_unload_seconds without traffic."""
     while True:
         try:
-            await asyncio.sleep(15)
-            cfg = state.config
-            if cfg is None:
-                continue
-            idle_after = cfg.stt_server.idle_unload_seconds
-            if idle_after <= 0:
-                continue
-            if not state.ready or state.engine is None:
-                continue
-            if state.loading:
-                continue
-            if state.lock.locked():
-                continue
-            idle_for = time.time() - state.last_used_at
-            if idle_for < idle_after:
-                continue
-            async with state.lock:
-                if not state.ready or state.engine is None:
-                    continue
-                if time.time() - state.last_used_at < idle_after:
-                    continue
-                logger.info(
-                    "STT idle %.0fs >= %ss — unloading model",
-                    time.time() - state.last_used_at,
-                    idle_after,
-                )
-                await asyncio.to_thread(_unload_model_sync)
+            await asyncio.sleep(IDLE_CHECK_INTERVAL_SECONDS)
+            await _idle_unload_once()
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -274,25 +347,32 @@ def create_app(config: Config) -> FastAPI:
         state.engine = None
         state.processor = None
         state.last_used_at = 0.0
+        worker = InferenceWorker()
+        state.worker = worker
         server_cfg = config.stt_server
         logger.info(
-            "STT server starting: bind=%s:%s engine=%s preload=%s idle_unload=%ss",
+            "STT server starting: bind=%s:%s engine=%s preload=%s idle_unload=%ss "
+            "queue_timeout=%ss max_audio=%ss",
             server_cfg.host,
             server_cfg.port,
             server_cfg.engine,
             server_cfg.preload_on_start,
             server_cfg.idle_unload_seconds,
+            server_cfg.queue_timeout_seconds,
+            server_cfg.max_audio_seconds,
         )
         state.model_name = _configured_model_name(config)
 
         if server_cfg.preload_on_start:
+            lease = await worker.acquire(PRIORITY_INTERACTIVE, timeout=None)
+            state.loading = True
             try:
-                await asyncio.to_thread(_load_model_sync, config)
+                await lease.run(_load_model_job, config, kind="load")
                 logger.info("STT ready (preloaded): model=%s", state.model_name)
-            except Exception as e:
-                state.warmup_error = str(e)
-                state.ready = False
-                logger.exception("STT preload failed: %s", e)
+            except Exception:
+                pass  # logged by the job; /healthz last_error and /readyz report it
+            finally:
+                lease.close()
         else:
             logger.info(
                 "STT process up; model not loaded (on-demand). readyz=503 until first request"
@@ -309,20 +389,36 @@ def create_app(config: Config) -> FastAPI:
                 except asyncio.CancelledError:
                     pass
                 state.idle_task = None
+            busy = worker.active_jobs > 0
+            worker.shutdown()
             state.ready = False
             state.engine = None
             state.processor = None
-            _release_mlx_cache()
+            if busy:
+                logger.warning("STT shutdown while a job is running; MLX cache left as is")
+            else:
+                _release_mlx_cache()
 
     app = FastAPI(title="VTTv2 Local STT", version=config.app.version, lifespan=lifespan)
+    install_error_handlers(app)
+    max_upload_mb = config.stt_server.max_upload_mb
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        max_bytes=max_upload_mb * 1024 * 1024 + MULTIPART_OVERHEAD_BYTES,
+        message=f"File too large (max {max_upload_mb} MB)",
+    )
 
     @app.get("/healthz")
     async def healthz() -> dict[str, Any]:
+        worker = state.worker
         return {
             "status": "ok",
             "service": "vtt2-stt",
             "ready": state.ready,
             "loading": state.loading,
+            "last_error": state.warmup_error,
+            "active_jobs": worker.active_jobs if worker else 0,
+            "queued": worker.queued if worker else 0,
             "model": state.model_name or None,
             "preload_on_start": bool(
                 state.config.stt_server.preload_on_start if state.config else True
@@ -354,7 +450,6 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/v1/audio/transcriptions")
     async def transcriptions(
-        request: Request,
         file: UploadFile = File(...),
         model: Optional[str] = Form(None),
         language: Optional[str] = Form(None),
@@ -365,53 +460,55 @@ def create_app(config: Config) -> FastAPI:
             None, alias="timestamp_granularities[]"
         ),
     ):
-        if state.config is None:
-            raise HTTPException(status_code=503, detail="STT not initialized")
+        cfg, worker = state.config, state.worker
+        if cfg is None or worker is None:
+            raise APIError(
+                503,
+                err.MODEL_LOADING,
+                "STT not initialized",
+                retry_after=err.RETRY_AFTER_LOADING_SECONDS,
+            )
 
         fmt = (response_format or "json").strip().lower()
         if fmt not in ("json", "verbose_json", "text"):
-            raise HTTPException(
-                status_code=400,
-                detail="response_format must be json, verbose_json, or text",
+            raise APIError(
+                400,
+                err.INVALID_REQUEST,
+                "response_format must be json, verbose_json, or text",
             )
         want_words = _want_word_timestamps(
             timestamp_granularities, timestamp_granularities_bracket
         )
 
-        cfg = state.config
         config_lang = _profile_language(cfg)
         try:
             requested_label, effective_language = resolve_request_language(
                 language, config_lang
             )
         except RejectedLanguage as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+            raise APIError(400, err.UNSUPPORTED_LANGUAGE, str(e)) from e
 
         initial_prompt: Optional[str] = None
         if prompt is not None and prompt.strip():
             initial_prompt = prompt.strip()
             if len(initial_prompt) > PROMPT_MAX_CHARS:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"prompt longer than {PROMPT_MAX_CHARS} characters",
+                raise APIError(
+                    400,
+                    err.INVALID_REQUEST,
+                    f"prompt longer than {PROMPT_MAX_CHARS} characters",
                 )
-        max_bytes = cfg.stt_server.max_upload_mb * 1024 * 1024
-        cl = request.headers.get("content-length")
-        if cl is not None:
-            try:
-                if int(cl) > max_bytes + 1024 * 64:
-                    raise HTTPException(status_code=413, detail="File too large")
-            except ValueError:
-                pass
 
+        # The body limit middleware already capped the request; this is the exact file limit.
+        max_bytes = cfg.stt_server.max_upload_mb * 1024 * 1024
         data = await file.read()
         if len(data) > max_bytes:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large (max {cfg.stt_server.max_upload_mb} MB)",
+            raise APIError(
+                413,
+                err.FILE_TOO_LARGE,
+                f"File too large (max {cfg.stt_server.max_upload_mb} MB)",
             )
         if not data:
-            raise HTTPException(status_code=400, detail="Empty file")
+            raise APIError(400, err.INVALID_AUDIO, "Empty file")
 
         if model:
             logger.info("STT request model=%s (server uses %s)", model, state.model_name)
@@ -432,90 +529,107 @@ def create_app(config: Config) -> FastAPI:
                 sample_rate=cfg.audio.sample_rate,
             )
         except AudioDecodeError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+            raise APIError(400, err.INVALID_AUDIO, str(e)) from e
         except Exception as e:
             logger.warning("STT: unexpected audio decode error: %s", e)
-            raise HTTPException(
-                status_code=400, detail=f"Не удалось декодировать аудио: {e}"
+            raise APIError(
+                400, err.INVALID_AUDIO, f"Не удалось декодировать аудио: {e}"
+            ) from e
+        del data
+
+        audio_seconds = audio.shape[0] / float(cfg.audio.sample_rate)
+        max_seconds = cfg.stt_server.max_audio_seconds
+        if audio_seconds > max_seconds:
+            raise APIError(
+                413,
+                err.AUDIO_TOO_LONG,
+                f"Audio is {audio_seconds:.0f}s long; the limit is {max_seconds}s "
+                "(stt_server.max_audio_seconds)",
+            )
+
+        try:
+            lease = await worker.acquire(
+                priority_for(audio_seconds),
+                timeout=float(cfg.stt_server.queue_timeout_seconds),
+            )
+        except QueueTimeoutError as e:
+            if state.loading:
+                raise APIError(
+                    503,
+                    err.MODEL_LOADING,
+                    "STT model is loading; retry shortly",
+                    retry_after=err.RETRY_AFTER_LOADING_SECONDS,
+                ) from e
+            raise APIError(
+                429,
+                err.BUSY,
+                "STT busy: another transcription is running",
+                retry_after=err.RETRY_AFTER_BUSY_SECONDS,
             ) from e
 
-        acquired = False
+        timeout = _request_timeout(cfg)
+        start = time.time()
         try:
+            await _ensure_model_loaded(lease, cfg, timeout)
             try:
-                await asyncio.wait_for(
-                    state.lock.acquire(),
-                    timeout=float(cfg.stt_server.request_timeout_seconds),
+                payload, duration_s = await lease.run(
+                    _transcribe_job,
+                    audio,
+                    sample_rate=cfg.audio.sample_rate,
+                    want_words=want_words,
+                    language=effective_language,
+                    requested_language=requested_label,
+                    initial_prompt=initial_prompt,
+                    timeout=timeout,
+                    kind="transcribe",
+                    audio_seconds=audio_seconds,
                 )
-                acquired = True
-            except asyncio.TimeoutError as e:
-                raise HTTPException(
-                    status_code=503, detail="STT busy (queue timeout)"
-                ) from e
-
-            await _ensure_model_loaded(cfg)
-            assert state.engine is not None and state.processor is not None
-            audio = state.processor.prepare_for_whisper(audio)
-            state.last_used_at = time.time()
-            duration_s = len(audio) / float(cfg.audio.sample_rate)
-            if duration_s >= 60:
-                logger.info(
-                    "STT long job: %.1fs audio (blocks menubar until done; concurrency=1)",
-                    duration_s,
+            except JobTimeoutError as e:
+                logger.error(
+                    "STT transcription timeout after %.0fs (%.1fs audio); "
+                    "the job keeps the model until it returns",
+                    timeout,
+                    audio_seconds,
                 )
-
-            start = time.time()
-            try:
-                payload = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        state.engine.transcribe_detailed,
-                        audio,
-                        word_timestamps=want_words,
-                        language=effective_language,
-                        requested_language=requested_label,
-                        initial_prompt=initial_prompt,
-                    ),
-                    timeout=float(cfg.stt_server.request_timeout_seconds),
-                )
-            except asyncio.TimeoutError as e:
-                raise HTTPException(
-                    status_code=503, detail="Transcription timeout"
+                raise APIError(
+                    504,
+                    err.TRANSCRIPTION_TIMEOUT,
+                    f"Transcription did not finish in {timeout:.0f}s "
+                    "(stt_server.request_timeout_seconds)",
                 ) from e
             except Exception as e:
                 logger.exception("STT transcription failed: %s", e)
-                raise HTTPException(status_code=500, detail="Transcription failed") from e
-
-            state.last_used_at = time.time()
-            payload = _strip_artifacts_payload(payload or {}, cfg)
-            payload["duration"] = float(payload.get("duration") or duration_s)
-            elapsed = time.time() - start
-            logger.info(
-                "STT ok: %.1fs audio → %d chars / %d segments in %.2fs format=%s",
-                duration_s,
-                len(payload.get("text") or ""),
-                len(payload.get("segments") or []),
-                elapsed,
-                fmt,
-            )
-            text = payload.get("text") or ""
-            reported_language = payload.get("language") or effective_language
-            if fmt == "text":
-                return PlainTextResponse(content=text)
-            if fmt == "verbose_json":
-                body = {
-                    "task": "transcribe",
-                    "language": reported_language,
-                    "duration": payload["duration"],
-                    "text": text,
-                    "segments": payload.get("segments") or [],
-                }
-                return body
-            body: dict[str, Any] = {"text": text}
-            if requested_label not in ("omitted", "blank") and reported_language:
-                body["language"] = reported_language
-            return body
+                raise APIError(500, err.TRANSCRIPTION_FAILED, "Transcription failed") from e
         finally:
-            if acquired:
-                state.lock.release()
+            lease.close()
+
+        payload = _strip_artifacts_payload(payload, cfg)
+        payload["duration"] = float(payload.get("duration") or duration_s)
+        elapsed = time.time() - start
+        logger.info(
+            "STT ok: %.1fs audio → %d chars / %d segments in %.2fs format=%s",
+            duration_s,
+            len(payload.get("text") or ""),
+            len(payload.get("segments") or []),
+            elapsed,
+            fmt,
+        )
+        text = payload.get("text") or ""
+        reported_language = payload.get("language") or effective_language
+        if fmt == "text":
+            return PlainTextResponse(content=text)
+        if fmt == "verbose_json":
+            return {
+                "task": "transcribe",
+                "language": reported_language,
+                "duration": payload["duration"],
+                "text": text,
+                "segments": payload.get("segments") or [],
+            }
+        body: dict[str, Any] = {"text": text}
+        if requested_label not in ("omitted", "blank") and reported_language:
+            body["language"] = reported_language
+        return body
 
     return app
 

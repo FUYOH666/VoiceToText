@@ -122,6 +122,18 @@ class TestConfigLoader:
         assert config.stt_server.port == 8766
         assert config.text_processing.whisper_artifact_languages == ["en"]
 
+    def test_env_overrides_queue_and_audio_limits(
+        self, temp_config_file, project_root, monkeypatch
+    ):
+        config = Config.from_yaml(str(temp_config_file), project_root)
+        assert config.stt_server.queue_timeout_seconds == 120
+        assert config.stt_server.max_audio_seconds == 1800
+        monkeypatch.setenv("VTT2_STT_SERVER_QUEUE_TIMEOUT_SECONDS", "2.5")
+        monkeypatch.setenv("VTT2_STT_SERVER__MAX_AUDIO_SECONDS", "600")
+        config = Config.from_yaml(str(temp_config_file), project_root)
+        assert config.stt_server.queue_timeout_seconds == 2.5
+        assert config.stt_server.max_audio_seconds == 600
+
     def test_env_overrides_unknown_and_reserved_keys_ignored(
         self, temp_config_file, project_root, monkeypatch, caplog
     ):
