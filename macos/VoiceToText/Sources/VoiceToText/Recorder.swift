@@ -7,6 +7,8 @@ import Foundation
 enum RecorderError: Error {
     case alreadyRecording
     case notRecording
+    case noInputDevice
+    case microphoneDenied
     case engine(String)
 }
 
@@ -16,7 +18,29 @@ final class Recorder: @unchecked Sendable {
     private let lock = NSLock()
     private var floats: [Float] = []
     private var converter: AVAudioConverter?
+    private var configObserver: NSObjectProtocol?
     private(set) var isRecording = false
+
+    /// Called on the main queue when the audio device changes mid-recording
+    /// (e.g. AirPods connect). The engine stops; the caller should finish with
+    /// what was captured instead of losing it.
+    var onInterrupted: (() -> Void)?
+
+    init() {
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+        ) { [weak self] _ in
+            guard let self, self.isRecording else { return }
+            AppLog.warning("audio device changed during recording")
+            self.onInterrupted?()
+        }
+    }
+
+    deinit {
+        if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
+    }
+
+    var samplesCaptured: Int { lock.withLock { floats.count } }
 
     func requestPermission() async -> Bool {
         await withCheckedContinuation { continuation in
@@ -27,6 +51,13 @@ final class Recorder: @unchecked Sendable {
     }
 
     func start() throws {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .denied, .restricted:
+            throw RecorderError.microphoneDenied
+        default:
+            break
+        }
+
         lock.lock()
         defer { lock.unlock() }
         if isRecording { throw RecorderError.alreadyRecording }
@@ -34,6 +65,11 @@ final class Recorder: @unchecked Sendable {
         floats = []
         let input = engine.inputNode
         let inputFormat = input.inputFormat(forBus: 0)
+        // No microphone at all: installTap on a 0-channel format raises an
+        // Objective-C exception and would crash the app.
+        guard inputFormat.channelCount > 0, inputFormat.sampleRate > 0 else {
+            throw RecorderError.noInputDevice
+        }
         guard
             let target = AVAudioFormat(
                 commonFormat: .pcmFormatFloat32,
@@ -73,6 +109,18 @@ final class Recorder: @unchecked Sendable {
         guard wasRecording else { throw RecorderError.notRecording }
         AppLog.info("recording stopped: \(captured.count) samples")
         return WAVEncoder.pcm16kMono(floats: captured)
+    }
+
+    /// Stop and throw the audio away (Esc while recording).
+    func discard() {
+        lock.lock()
+        isRecording = false
+        floats = []
+        lock.unlock()
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        converter = nil
+        AppLog.info("recording discarded")
     }
 
     private func append(buffer: AVAudioPCMBuffer, target: AVAudioFormat) {

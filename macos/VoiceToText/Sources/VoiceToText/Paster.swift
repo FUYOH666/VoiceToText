@@ -2,17 +2,28 @@
 import VoiceToTextCore
 #endif
 import AppKit
+import Carbon
 import CoreGraphics
 import Foundation
 
-/// Save frontmost app → clipboard → Cmd+V.
-/// Same event order as the working Python injector (annotated/session tap + Cmd down/up).
+enum PasteResult: Equatable {
+    case pasted
+    /// A password field has secure input on; nothing was pasted or left on the clipboard.
+    case secureInput
+    /// No Accessibility grant: the text is left on the clipboard for a manual Cmd+V.
+    case noAccessibility
+    case failed
+}
+
+/// Save frontmost app → borrow the clipboard → Cmd+V → give the clipboard back.
+@MainActor
 enum Paster {
     private static var savedBundleID: String?
+    /// How long the target app gets to read the clipboard before it is restored.
+    private static let restoreDelay: UInt64 = 1_000_000_000
 
-    /// Log only. Prompting on every paste fights a stale TCC row after ad-hoc rebuilds.
-    /// Posting Cmd+V needs Accessibility only. The Carbon hotkey needs no permission,
-    /// and the app never listens to other apps' keystrokes, so no Input Monitoring.
+    /// Log only. Posting Cmd+V needs Accessibility; the Carbon hotkey needs no
+    /// permission, and the app never listens to other apps' keystrokes.
     static func logPermissions() {
         let postEvents = CGPreflightPostEventAccess()
         AppLog.info("permissions Accessibility=\(postEvents)")
@@ -40,40 +51,56 @@ enum Paster {
         }
     }
 
-    @discardableResult
-    static func paste(_ text: String) -> Bool {
+    static func paste(_ text: String) async -> PasteResult {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            AppLog.warning("empty text; skip paste")
-            return false
+        guard !trimmed.isEmpty else { return .failed }
+
+        await restoreFrontmost()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        if IsSecureEventInputEnabled() {
+            AppLog.warning("secure input is on (password field); not pasting")
+            return .secureInput
         }
 
-        logPermissions()
-        restoreFrontmost()
-        Thread.sleep(forTimeInterval: 0.3)
+        let pasteboard = NSPasteboard.general
+        guard CGPreflightPostEventAccess() else {
+            pasteboard.clearContents()
+            pasteboard.setString(trimmed, forType: .string)
+            AppLog.error("no Accessibility; text left on clipboard for manual Cmd+V")
+            return .noAccessibility
+        }
 
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
         AppLog.info("frontmost before Cmd+V: \(front)")
 
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        guard pasteboard.setString(trimmed, forType: .string) else {
-            AppLog.error("NSPasteboard setString failed")
-            return false
+        let snapshot = ClipboardSnapshot.capture(pasteboard)
+        guard let ourChange = ClipboardSnapshot.writeTransient(trimmed, to: pasteboard) else {
+            AppLog.error("NSPasteboard write failed")
+            return .failed
         }
-        Thread.sleep(forTimeInterval: 0.2)
+        try? await Task.sleep(nanoseconds: 100_000_000)
 
-        let tap = preferredTap()
-        let posted = postCommandV(tap: tap)
-        if posted {
-            AppLog.info("Cmd+V posted via \(tapName(tap)) (\(trimmed.count) chars); text also on clipboard")
-        } else {
-            AppLog.error("Cmd+V post failed; text left on clipboard. Enable Accessibility for VoiceToText")
+        guard await postCommandV(tap: .cgAnnotatedSessionEventTap) else {
+            AppLog.error("Cmd+V events could not be created; text left on clipboard")
+            return .failed
         }
-        return posted
+        AppLog.info("Cmd+V posted (\(trimmed.count) chars)")
+
+        try? await Task.sleep(nanoseconds: restoreDelay)
+        if ClipboardSnapshot.shouldRestore(
+            changeCountAfterWrite: ourChange,
+            currentChangeCount: pasteboard.changeCount
+        ) {
+            snapshot.restore(to: pasteboard)
+            AppLog.info("clipboard restored")
+        } else {
+            AppLog.info("clipboard changed by someone else; not restoring")
+        }
+        return .pasted
     }
 
-    private static func restoreFrontmost() {
+    private static func restoreFrontmost() async {
         guard let savedBundleID else { return }
         let match = NSWorkspace.shared.runningApplications.first {
             $0.bundleIdentifier == savedBundleID
@@ -87,27 +114,10 @@ enum Paster {
         } else {
             match.activate(options: [.activateIgnoringOtherApps])
         }
-        Thread.sleep(forTimeInterval: 0.2)
+        try? await Task.sleep(nanoseconds: 200_000_000)
     }
 
-    private static func preferredTap() -> CGEventTapLocation {
-        // Python: AnnotatedSession first (Sequoia+), then session. hidEventTap is often dropped.
-        if CGPreflightPostEventAccess() {
-            return .cgAnnotatedSessionEventTap
-        }
-        return .cgSessionEventTap
-    }
-
-    private static func tapName(_ tap: CGEventTapLocation) -> String {
-        switch tap {
-        case .cghidEventTap: return "hid"
-        case .cgSessionEventTap: return "session"
-        case .cgAnnotatedSessionEventTap: return "annotated"
-        @unknown default: return "unknown"
-        }
-    }
-
-    private static func postCommandV(tap: CGEventTapLocation) -> Bool {
+    private static func postCommandV(tap: CGEventTapLocation) async -> Bool {
         let source = CGEventSource(stateID: .hidSystemState)
         let cmd: CGKeyCode = 0x37
         let keyV: CGKeyCode = 0x09
@@ -125,13 +135,12 @@ enum Paster {
         cmdUp.flags = []
 
         cmdDown.post(tap: tap)
-        Thread.sleep(forTimeInterval: 0.05)
+        try? await Task.sleep(nanoseconds: 50_000_000)
         vDown.post(tap: tap)
-        Thread.sleep(forTimeInterval: 0.15)
+        try? await Task.sleep(nanoseconds: 150_000_000)
         vUp.post(tap: tap)
-        Thread.sleep(forTimeInterval: 0.05)
+        try? await Task.sleep(nanoseconds: 50_000_000)
         cmdUp.post(tap: tap)
-        Thread.sleep(forTimeInterval: 0.2)
         return true
     }
 }
