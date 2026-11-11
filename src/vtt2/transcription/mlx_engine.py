@@ -80,6 +80,60 @@ class MLXWhisperTranscriber:
             self._resolved_model_source = source
         return self._resolved_model_source
 
+    @staticmethod
+    def _collapse_loops(text: str, segments: list[dict]) -> tuple[str, list[dict]]:
+        """Collapse repeated segments and phrases; keep engine text if nothing changed."""
+        from text.repetition import collapse_repeated_phrases, collapse_repeated_segments
+
+        segments, seg_changed = collapse_repeated_segments(segments)
+        phrase_changed = False
+        for seg in segments:
+            if "words" in seg:
+                continue  # word timings would no longer line up with edited text
+            cleaned, changed = collapse_repeated_phrases(seg.get("text") or "")
+            if changed:
+                seg["text"] = cleaned
+                phrase_changed = True
+
+        if seg_changed or phrase_changed:
+            if segments:
+                text = " ".join(s["text"] for s in segments if s.get("text")).strip()
+            for index, seg in enumerate(segments):
+                seg["id"] = index
+            logger.info("MLX: collapsed a repetition loop (%d segments left)", len(segments))
+        elif not segments:
+            text, changed = collapse_repeated_phrases(text)
+            if changed:
+                logger.info("MLX: collapsed a repetition loop in text")
+        return text, segments
+
+    def _decode_options(self, *, word_timestamps: bool = False) -> dict:
+        """Decoder settings shared by every whisper.transcribe call.
+
+        A scalar temperature disables Whisper's fallback, so a window that got
+        stuck in a loop (high compression ratio) is never re-decoded. Previous-
+        text conditioning lets one hallucination prime the next window.
+        """
+        cfg = self.mlx_config
+        base = float(cfg.temperature)
+        if getattr(cfg, "temperature_fallback", True):
+            steps = int(round((1.0 - base) / 0.2))
+            temperature = tuple(round(base + 0.2 * k, 2) for k in range(max(steps, 0) + 1))
+        else:
+            temperature = base
+        options = {
+            "temperature": temperature,
+            "compression_ratio_threshold": cfg.compression_ratio_threshold,
+            "logprob_threshold": getattr(cfg, "logprob_threshold", -1.0),
+            "no_speech_threshold": cfg.no_speech_threshold,
+            "condition_on_previous_text": bool(getattr(cfg, "condition_on_previous_text", False)),
+        }
+        silence = getattr(cfg, "hallucination_silence_threshold", None)
+        if word_timestamps and silence is not None:
+            # mlx_whisper only applies it when word timings are computed.
+            options["hallucination_silence_threshold"] = float(silence)
+        return options
+
     def release(self) -> None:
         """Drop mlx_whisper's process-wide model so idle unload frees the weights."""
         self._model_cache = None
@@ -220,18 +274,30 @@ class MLXWhisperTranscriber:
             if max_val > 1.0:
                 audio_data = audio_data / max_val
 
+            offset = 0.0
+            if getattr(self.mlx_config, "trim_silence", True):
+                from audio.silence import trim_silence
+
+                trimmed, offset = trim_silence(audio_data, self.sample_rate)
+                if offset or len(trimmed) != len(audio_data):
+                    logger.info(
+                        "MLX: trimmed silence %.2fs → %.2fs (start +%.2fs)",
+                        duration,
+                        len(trimmed) / float(self.sample_rate),
+                        offset,
+                    )
+                audio_data = trimmed
+
             result = whisper.transcribe(
                 audio_data,
                 path_or_hf_repo=self._model_source(),
                 language=effective_language,
                 initial_prompt=prompt,
-                temperature=self.mlx_config.temperature,
-                compression_ratio_threshold=self.mlx_config.compression_ratio_threshold,
-                no_speech_threshold=self.mlx_config.no_speech_threshold,
                 word_timestamps=word_timestamps,
                 verbose=False,
+                **self._decode_options(word_timestamps=word_timestamps),
             )
-            payload = self._normalize_detailed_result(result, duration)
+            payload = self._normalize_detailed_result(result, duration, offset=offset)
             elapsed = time.time() - start_time
             self._transcription_count += 1
             logger.info(
@@ -245,7 +311,12 @@ class MLXWhisperTranscriber:
             logger.error("Ошибка detailed-транскрипции MLX: %s", e)
             raise RuntimeError(f"Ошибка транскрипции MLX: {e}") from e
 
-    def _normalize_detailed_result(self, result, duration: float) -> dict:
+    def _normalize_detailed_result(self, result, duration: float, *, offset: float = 0.0) -> dict:
+        """Shape mlx_whisper output for the API.
+
+        ``offset`` is the silence trimmed from the start; it is added back so
+        timecodes match the uploaded file. Repetition loops are collapsed here.
+        """
         text = self._extract_text_from_result(result)
         language = None
         raw_segments = []
@@ -258,8 +329,8 @@ class MLXWhisperTranscriber:
                 continue
             item = {
                 "id": int(seg.get("id", index)),
-                "start": float(seg.get("start") or 0.0),
-                "end": float(seg.get("end") or 0.0),
+                "start": float(seg.get("start") or 0.0) + offset,
+                "end": float(seg.get("end") or 0.0) + offset,
                 "text": (seg.get("text") or "").strip(),
             }
             words = seg.get("words") or []
@@ -267,13 +338,17 @@ class MLXWhisperTranscriber:
                 item["words"] = [
                     {
                         "word": w.get("word") or w.get("text") or "",
-                        "start": float(w.get("start") or 0.0),
-                        "end": float(w.get("end") or 0.0),
+                        "start": float(w.get("start") or 0.0) + offset,
+                        "end": float(w.get("end") or 0.0) + offset,
                     }
                     for w in words
                     if isinstance(w, dict)
                 ]
             segments.append(item)
+
+        if getattr(self.mlx_config, "collapse_repetitions", True):
+            text, segments = self._collapse_loops(text, segments)
+
         if not segments and text:
             segments = [{"id": 0, "start": 0.0, "end": float(duration), "text": text}]
         return {
@@ -322,10 +397,8 @@ class MLXWhisperTranscriber:
                 audio_data,
                 path_or_hf_repo=self._model_source(),
                 language=language_param,  # None для автоопределения
-                temperature=self.mlx_config.temperature,
-                compression_ratio_threshold=self.mlx_config.compression_ratio_threshold,
-                no_speech_threshold=self.mlx_config.no_speech_threshold,
                 verbose=False,
+                **self._decode_options(),
             )
             
             # Извлечение текста из результата
@@ -520,10 +593,8 @@ class MLXWhisperTranscriber:
                     chunk,
                     path_or_hf_repo=self._model_source(),
                     language=language_param,  # None для автоопределения
-                    temperature=self.mlx_config.temperature,
-                    compression_ratio_threshold=self.mlx_config.compression_ratio_threshold,
-                    no_speech_threshold=self.mlx_config.no_speech_threshold,
                     verbose=False,
+                    **self._decode_options(),
                 )
                 text = self._extract_text_from_result(result)
                 logger.debug(f"  ✅ Чанк {idx+1} обработан: {len(text)} символов")

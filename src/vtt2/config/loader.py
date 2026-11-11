@@ -107,6 +107,35 @@ class MLXWhisperConfig(BaseModel):
     best_of: int = Field(5, ge=1, description="Best of")
     no_speech_threshold: float = Field(0.6, ge=0.0, le=1.0, description="No speech threshold")
     compression_ratio_threshold: float = Field(2.4, ge=0.0, description="Compression ratio threshold")
+    # Защита от зацикливания и галлюцинаций (см. docs/WHISPER_ARTIFACTS.md)
+    temperature_fallback: bool = Field(
+        True,
+        description=(
+            "Если окно «застряло» (compression ratio / logprob), перегенерировать его с "
+            "temperature +0.2 до 1.0. Без этого зацикленный фрагмент не исправляется."
+        ),
+    )
+    logprob_threshold: Optional[float] = Field(
+        -1.0, description="Средний logprob ниже порога считается неудачным декодом (триггер fallback)"
+    )
+    condition_on_previous_text: bool = Field(
+        False,
+        description=(
+            "Подавать текст прошлого 30-с окна как подсказку. True держит стиль между окнами, "
+            "но одна галлюцинация раскручивается в петлю повторов."
+        ),
+    )
+    hallucination_silence_threshold: Optional[float] = Field(
+        2.0,
+        ge=0.0,
+        description="Только с word timestamps: пропускать паузы длиннее N с вокруг вероятной галлюцинации",
+    )
+    trim_silence: bool = Field(
+        True, description="Обрезать тишину в начале и в конце записи перед декодом"
+    )
+    collapse_repetitions: bool = Field(
+        True, description="Схлопывать фразы и сегменты, повторённые 3+ раза подряд"
+    )
     # Параметры для обработки длинных записей
     chunk_size_seconds: int = Field(30, ge=10, le=300, description="Размер чанка для обработки длинных записей (секунды)")
     chunk_overlap_seconds: int = Field(2, ge=0, le=10, description="Перекрытие между чанками (секунды)")
