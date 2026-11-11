@@ -2,11 +2,17 @@
 
 ## [Unreleased]
 
+The next release will be **v2.2.0**, so its tag sorts after `v2.1.1` from the archived old line.
+
 ### Added
+- CI on macOS arm64 (`.github/workflows/ci.yml`): secret and personal-path scan, `uv lock --check`, version sync check, pytest, Swift tests, app build, and a `minos 13.0` check on the built binary.
+- `scripts/sync_version.py`: `pyproject.toml` is the single source of the version. It writes `CFBundleShortVersionString` and `CFBundleVersion` in `Info.plist`, `app.version` in `config*.yaml` and `vtt2.__version__`. `--check` fails if any copy differs.
+- Issue and pull request templates. [`docs/ROADMAP.md`](docs/ROADMAP.md): engineering review and roadmap.
 - Optional STT engine `qwen3_asr` via extra `qwen` (`mlx-qwen3-asr`). The profile loads pre-quantized `moona3k/mlx-qwen3-asr-1.7b-8bit` with `quantization_bits: null` (no second quantize pass; not an mlx-community checkpoint). The menubar items Whisper and Qwen rewrite `stt_server.engine` and restart only the STT process. One model in memory. If the extra is missing, the menu leaves the config alone and startup exits with `uv sync --extra qwen`. There is no fallback to Whisper.
 - Local code signing identity `vtt-local-codesign` (`macos/scripts/setup-local-signing.sh`). `build.sh` uses it when present, so Accessibility and Input Monitoring survive a rebuild. The first rebuild after ad-hoc still needs one grant.
 
 ### Changed
+- The app bundle version and `vtt2.__version__` follow `pyproject.toml` (1.7.0). They said 1.5.1 and 1.0.0.
 - Default `config.yaml` and `config.resident.yaml` use `qwen3_asr` (`moona3k/mlx-qwen3-asr-1.7b-8bit`). Whisper remains the menu switch. A fresh install needs `uv sync --extra qwen`.
 
 ## [1.7.0] - 2026-10-06

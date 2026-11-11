@@ -1,0 +1,108 @@
+name: Bug report
+description: Something does not work as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        VoiceToText supports Apple Silicon Macs only. Please fill in every required field so we can reproduce the problem.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Menu bar app (Option+Space, recording, paste)
+        - STT server (transcription quality, errors, model loading)
+        - HTTP API (/v1/audio/transcriptions, agents)
+        - Install / setup / permissions
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: VoiceToText version
+      description: Version from `pyproject.toml` or the release tag, plus the commit if you built from source.
+      placeholder: 1.7.0 (42a05f8)
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Apple menu → About This Mac.
+      placeholder: macOS 15.5
+    validations:
+      required: true
+  - type: dropdown
+    id: chip
+    attributes:
+      label: Mac chip
+      options:
+        - M1
+        - M2
+        - M3
+        - M4
+        - M5
+        - Other Apple Silicon
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: STT engine
+      description: "`stt_server.engine` in your config, also printed in the server log at startup."
+      options:
+        - qwen3_asr (default)
+        - mlx_whisper
+        - whisper_cpp
+        - remote
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: Hugging Face repo id from your config, if you changed it.
+      placeholder: moona3k/mlx-qwen3-asr-1.7b-8bit
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the STT server and VoiceToText.app
+        2. Press Option+Space in TextEdit, speak for ~10 s, press again
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: |
+        Logs live in `~/Library/Logs/vtt2/` (`voicetotext.log`, `stt.stdout.log`, `stt.stderr.log`).
+        Paste only the lines around the failure. Remove transcribed text you do not want public.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Checklist
+      options:
+        - label: I removed tokens, private IP addresses and personal paths (`/Users/<name>/`) from this report
+          required: true
+        - label: I did not attach audio recordings or transcripts I am not comfortable sharing publicly
+          required: true
