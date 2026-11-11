@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-label="VoiceToText — free, private voice typing for Apple Silicon Macs">
+  <rect width="1280" height="360" rx="24" fill="#0D1117"/>
+  <!-- app mark -->
+  <g transform="translate(88 92)">
+    <rect width="120" height="120" rx="30" fill="#161B22" stroke="#30363D" stroke-width="2"/>
+    <rect x="14.5" y="54.2" width="7" height="11.5" rx="3.5" fill="#F97316"/>
+    <rect x="26.0" y="47.4" width="7" height="25.3" rx="3.5" fill="#F97316"/>
+    <rect x="37.5" y="38.2" width="7" height="43.7" rx="3.5" fill="#F97316"/>
+    <rect x="49.0" y="45.0" width="7" height="29.9" rx="3.5" fill="#F97316"/>
+    <rect x="60.5" y="29.0" width="7" height="62.1" rx="3.5" fill="#F97316"/>
+    <rect x="72.0" y="42.8" width="7" height="34.5" rx="3.5" fill="#F97316"/>
+    <rect x="83.5" y="34.7" width="7" height="50.6" rx="3.5" fill="#F97316"/>
+    <rect x="95.0" y="48.5" width="7" height="23.0" rx="3.5" fill="#F97316"/>
+    <rect x="106.5" y="53.1" width="7" height="13.8" rx="3.5" fill="#F97316"/>
+  </g>
+  <!-- wordmark -->
+  <text x="236" y="150" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif" font-size="64" font-weight="700" fill="#F0F6FC" letter-spacing="-1.5">VoiceToText</text>
+  <text x="238" y="196" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif" font-size="23" fill="#9DA7B3">Free, private voice typing for Apple Silicon Macs.</text>
+  <text x="238" y="232" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif" font-size="23" fill="#9DA7B3">Local models · one-command install · nothing leaves your Mac</text>
+  <!-- key cap + flow -->
+  <g transform="translate(922 82)">
+    <rect x="0" y="0" width="300" height="196" rx="18" fill="#161B22" stroke="#30363D" stroke-width="2"/>
+    <g transform="translate(28 30)">
+      <rect width="74" height="58" rx="12" fill="#21262D" stroke="#30363D" stroke-width="2"/>
+      <text x="37" y="40" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif" font-size="28" fill="#F0F6FC">⌥</text>
+      <rect x="86" width="158" height="58" rx="12" fill="#21262D" stroke="#F97316" stroke-width="3"/>
+      <text x="165" y="38" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="600" fill="#F0F6FC">Space</text>
+    </g>
+    <text x="150" y="124" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif" font-size="19" fill="#9DA7B3">hold · speak · let go</text>
+    <g transform="translate(28 142)">
+      <rect width="244" height="34" rx="8" fill="#0D1117" stroke="#30363D" stroke-width="1.5"/>
+      <text x="12" y="23" font-family="'SF Mono', ui-monospace, Menlo, Consolas, monospace" font-size="14" fill="#E6EDF3">Ship the installer today</text>
+      <rect x="218" y="8" width="2.5" height="18" fill="#F97316"/>
+    </g>
+  </g>
+</svg>

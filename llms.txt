@@ -1,0 +1,17 @@
+# VoiceToText
+
+> Free, private voice typing for Apple Silicon Macs. Hold Option+Space, speak, let go: the text is pasted at the cursor. Speech models (Qwen3-ASR, Whisper) run locally on MLX; audio never leaves the Mac. A local server on 127.0.0.1:8765 implements the OpenAI audio API (transcriptions and translations to English), so scripts and AI agents can use it with the official OpenAI SDK by setting base_url to http://127.0.0.1:8765/v1. Install: curl -fsSL https://raw.githubusercontent.com/FUYOH666/VoiceToText/main/scripts/install.sh | bash (macOS 13+, M1 or newer). MIT license.
+
+## Docs
+
+- [README](https://github.com/FUYOH666/VoiceToText/blob/main/README.md): what it does, install, features, models, FAQ
+- [STT API](https://github.com/FUYOH666/VoiceToText/blob/main/docs/STT_API.md): endpoints, request fields, response formats, error codes, model management API
+- [AGENTS.md](https://github.com/FUYOH666/VoiceToText/blob/main/AGENTS.md): repository layout, build and test commands, rules for coding agents
+- [Model catalog](https://github.com/FUYOH666/VoiceToText/blob/main/src/vtt2/model_catalog/catalog.yaml): verified models with download size, memory, recommendation tiers
+
+## Optional
+
+- [Changelog](https://github.com/FUYOH666/VoiceToText/blob/main/CHANGELOG.md)
+- [Roadmap and engineering review](https://github.com/FUYOH666/VoiceToText/blob/main/docs/ROADMAP.md)
+- [Whisper artifacts and loop handling](https://github.com/FUYOH666/VoiceToText/blob/main/docs/WHISPER_ARTIFACTS.md)
+- [Русский README](https://github.com/FUYOH666/VoiceToText/blob/main/README.ru.md)
