@@ -11,11 +11,6 @@ struct VoiceToTextApp: App {
         MenuBarExtra {
             Text("Статус: \(state.statusLine)")
             Divider()
-            Button(state.engineButtonTitle(.whisper)) { state.selectEngine(.whisper) }
-                .disabled(state.isSwitching || state.isBusy)
-            Button(state.engineButtonTitle(.qwen)) { state.selectEngine(.qwen) }
-                .disabled(state.isSwitching || state.isBusy)
-            Divider()
             Button(state.recordButtonTitle) { state.toggle() }
             if state.phase == .recording {
                 Button("Отменить запись (Esc)") { state.cancel() }
@@ -29,6 +24,22 @@ struct VoiceToTextApp: App {
                     ForEach(state.history, id: \.id) { entry in
                         Button(AppState.historyTitle(entry)) { state.historyItemSelected(entry) }
                     }
+                }
+            }
+            Divider()
+            Menu(state.modelMenuTitle) {
+                if state.modelsUnavailable && state.models.isEmpty {
+                    Text("Сервер распознавания не отвечает")
+                }
+                ForEach(state.models) { model in
+                    Button(ModelMenu.title(model)) { state.selectModel(model) }
+                        .disabled(state.isBusy || state.isSwitching || (!model.fitsMemory && !model.active))
+                }
+                Divider()
+                Button("Своя модель с Hugging Face…") { state.addCustomModel() }
+                    .disabled(state.isBusy || state.isSwitching)
+                if let memory = state.memoryGB {
+                    Text("Память Mac: \(Int(memory.rounded())) ГБ · ★ рекомендуется")
                 }
             }
             Divider()

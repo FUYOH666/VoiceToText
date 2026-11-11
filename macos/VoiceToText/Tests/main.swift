@@ -7,13 +7,12 @@ expect(AppLog.logFile.path.hasPrefix(testDirectory.path), "test log stays in the
 
 runAppConfigTests()
 runWAVEncoderTests()
-runEngineSwitchTests()
-runLiveShapedSwitchTests()
 runDictationStoreTests()
 runClipboardTests()
 let sem = DispatchSemaphore(value: 0)
 Task {
     await runSTTClientTests()
+    await runModelsClientTests()
     sem.signal()
 }
 sem.wait()
