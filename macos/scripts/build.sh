@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# Build VoiceToText.app (LSUIElement) via SwiftPM. No Xcode.app required.
+# Build VoiceToText.app (LSUIElement) with plain swiftc. No Xcode.app required.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PKG="$ROOT/macos/VoiceToText"
 DIST="$ROOT/macos/dist/VoiceToText.app"
 BIN_NAME="VoiceToText"
+# Keep in sync with LSMinimumSystemVersion in Resources/Info.plist. Without an
+# explicit target swiftc stamps the host OS as minos and older macOS refuses to launch.
+TARGET="arm64-apple-macos13.0"
 
 STAGE="$(mktemp -d)"
 BIN="$STAGE/$BIN_NAME"
 
 # SwiftPM PackageDescription is broken on some Command Line Tools; swiftc is the source of truth.
 swiftc -parse-as-library \
+  -target "$TARGET" \
   -O \
   -o "$BIN" \
   "$PKG/Sources/VoiceToTextCore/AppLog.swift" \
@@ -41,7 +45,7 @@ if [[ -f "$PKG/Resources/icon.png" ]]; then
 fi
 
 # Stable local identity keeps the designated requirement across rebuilds, so
-# Accessibility and Input Monitoring survive. Ad-hoc (`-`) changes cdhash every
+# Microphone and Accessibility grants survive. Ad-hoc (`-`) changes cdhash every
 # build and macOS drops those grants. No hardened runtime here — that is release.sh.
 LOCAL_SIGN_IDENTITY="${VTT2_LOCAL_SIGN_IDENTITY:-vtt-local-codesign}"
 SIGN_ID="-"

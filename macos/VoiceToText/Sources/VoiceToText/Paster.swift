@@ -2,7 +2,6 @@
 import VoiceToTextCore
 #endif
 import AppKit
-import ApplicationServices
 import CoreGraphics
 import Foundation
 
@@ -12,23 +11,22 @@ enum Paster {
     private static var savedBundleID: String?
 
     /// Log only. Prompting on every paste fights a stale TCC row after ad-hoc rebuilds.
+    /// Posting Cmd+V needs Accessibility only. The Carbon hotkey needs no permission,
+    /// and the app never listens to other apps' keystrokes, so no Input Monitoring.
     static func logPermissions() {
-        let accessibility = AXIsProcessTrusted()
-        let monitoring = CGPreflightListenEventAccess()
-        AppLog.info("permissions Accessibility=\(accessibility) InputMonitoring=\(monitoring)")
-        if !accessibility || !monitoring {
+        let postEvents = CGPreflightPostEventAccess()
+        AppLog.info("permissions Accessibility=\(postEvents)")
+        if !postEvents {
             AppLog.warning(
-                "VoiceToText is not trusted yet. Remove the old row in Privacy, add this .app, enable Accessibility and Input Monitoring."
+                "VoiceToText is not trusted yet. Remove the old row in Privacy, add this .app, enable Accessibility."
             )
         }
     }
 
     /// Explicit menu action only — shows the system sheet once.
     static func promptPermissions() {
-        let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(prompt)
-        if !CGPreflightListenEventAccess() {
-            _ = CGRequestListenEventAccess()
+        if !CGPreflightPostEventAccess() {
+            _ = CGRequestPostEventAccess()
         }
         logPermissions()
     }
@@ -70,7 +68,7 @@ enum Paster {
         if posted {
             AppLog.info("Cmd+V posted via \(tapName(tap)) (\(trimmed.count) chars); text also on clipboard")
         } else {
-            AppLog.error("Cmd+V post failed; text left on clipboard. Enable Accessibility + Input Monitoring for VoiceToText")
+            AppLog.error("Cmd+V post failed; text left on clipboard. Enable Accessibility for VoiceToText")
         }
         return posted
     }
@@ -94,7 +92,7 @@ enum Paster {
 
     private static func preferredTap() -> CGEventTapLocation {
         // Python: AnnotatedSession first (Sequoia+), then session. hidEventTap is often dropped.
-        if AXIsProcessTrusted() || CGPreflightListenEventAccess() {
+        if CGPreflightPostEventAccess() {
             return .cgAnnotatedSessionEventTap
         }
         return .cgSessionEventTap

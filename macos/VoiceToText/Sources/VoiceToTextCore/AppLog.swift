@@ -5,8 +5,12 @@ public enum AppLog {
     private static let lock = NSLock()
     private static var fileHandle: FileHandle?
 
+    /// Test runner only: keeps test runs out of the real app log. Set before the first write.
+    static var directoryOverride: URL?
+
     public static var logDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        if let directoryOverride { return directoryOverride }
+        return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/vtt2", isDirectory: true)
     }
 
