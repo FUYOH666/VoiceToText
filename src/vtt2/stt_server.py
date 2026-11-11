@@ -271,6 +271,7 @@ def _transcribe_job(
     language: Optional[str],
     requested_language: str,
     initial_prompt: Optional[str],
+    task: str = "transcribe",
 ) -> tuple[dict, float]:
     """Worker-thread job: prepare audio and run the engine. Returns (payload, seconds)."""
     engine, processor = state.engine, state.processor
@@ -288,6 +289,8 @@ def _transcribe_job(
             language=language,
             requested_language=requested_language,
             initial_prompt=initial_prompt,
+            # Only Whisper knows `task`; transcription keeps the old call for other engines.
+            **({"task": task} if task != "transcribe" else {}),
         )
         return payload or {}, duration_s
     finally:
@@ -498,18 +501,17 @@ def create_app(config: Config) -> FastAPI:
             content={"status": "not_ready", "detail": detail, "loading": state.loading},
         )
 
-    @app.post("/v1/audio/transcriptions")
-    async def transcriptions(
-        file: UploadFile = File(...),
-        model: Optional[str] = Form(None),
-        language: Optional[str] = Form(None),
-        response_format: str = Form("json"),
-        prompt: Optional[str] = Form(None),
-        timestamp_granularities: Optional[str] = Form(None),
-        timestamp_granularities_bracket: Optional[str] = Form(
-            None, alias="timestamp_granularities[]"
-        ),
+    async def _handle_audio(
+        file: UploadFile,
+        model: Optional[str],
+        language: Optional[str],
+        response_format: str,
+        prompt: Optional[str],
+        timestamp_granularities: Optional[str],
+        timestamp_granularities_bracket: Optional[str],
+        task: str = "transcribe",
     ):
+        """Shared body of /v1/audio/transcriptions and /v1/audio/translations."""
         cfg, worker = state.config, state.worker
         if cfg is None or worker is None:
             raise APIError(
@@ -633,8 +635,9 @@ def create_app(config: Config) -> FastAPI:
                     language=effective_language,
                     requested_language=requested_label,
                     initial_prompt=initial_prompt,
+                    task=task,
                     timeout=timeout,
-                    kind="transcribe",
+                    kind=task,
                     audio_seconds=audio_seconds,
                 )
             except JobTimeoutError as e:
@@ -673,7 +676,7 @@ def create_app(config: Config) -> FastAPI:
             return PlainTextResponse(content=text)
         if fmt == "verbose_json":
             return {
-                "task": "transcribe",
+                "task": task,
                 "language": reported_language,
                 "duration": payload["duration"],
                 "text": text,
@@ -684,7 +687,64 @@ def create_app(config: Config) -> FastAPI:
             body["language"] = reported_language
         return body
 
+    @app.post("/v1/audio/transcriptions")
+    async def transcriptions(
+        file: UploadFile = File(...),
+        model: Optional[str] = Form(None),
+        language: Optional[str] = Form(None),
+        response_format: str = Form("json"),
+        prompt: Optional[str] = Form(None),
+        timestamp_granularities: Optional[str] = Form(None),
+        timestamp_granularities_bracket: Optional[str] = Form(
+            None, alias="timestamp_granularities[]"
+        ),
+    ):
+        return await _handle_audio(
+            file, model, language, response_format, prompt,
+            timestamp_granularities, timestamp_granularities_bracket,
+        )
+
+    @app.post("/v1/audio/translations")
+    async def translations(
+        file: UploadFile = File(...),
+        model: Optional[str] = Form(None),
+        language: Optional[str] = Form(None),
+        response_format: str = Form("json"),
+        prompt: Optional[str] = Form(None),
+    ):
+        """Speech in any language → English text (Whisper's built-in translate task).
+
+        OpenAI-compatible. ``language`` is the optional *source* language hint.
+        """
+        if state.config is not None:
+            reason = _translation_unsupported(state.config)
+            if reason:
+                raise APIError(400, err.TRANSLATION_UNSUPPORTED, reason)
+        return await _handle_audio(
+            file, model, language, response_format, prompt, None, None, task="translate",
+        )
+
     return app
+
+
+def _translation_unsupported(config: Config) -> Optional[str]:
+    """Why the loaded model can't translate, or None if it can.
+
+    Only Whisper translates (to English). large-v3-turbo was trained for
+    transcription only and translates poorly, so catalog entries say so.
+    """
+    from model_catalog.registry import active_selection, load_catalog
+
+    family, repo = active_selection(config)
+    if family not in WHISPER_FAMILY_ENGINES:
+        return (
+            "Translation to English needs a Whisper model; the active model only transcribes. "
+            "Pick Whisper large-v3 in the model menu."
+        )
+    spec = load_catalog().find(family, repo)
+    if spec is not None and not spec.translates:
+        return f"{spec.title} translates poorly; pick Whisper large-v3 (or its 8-bit) for translation."
+    return None
 
 
 def run_server(config: Config) -> None:

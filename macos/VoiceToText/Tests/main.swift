@@ -14,6 +14,7 @@ let sem = DispatchSemaphore(value: 0)
 Task {
     await runSTTClientTests()
     await runModelsClientTests()
+    await runTranslationClientTests()
     sem.signal()
 }
 sem.wait()

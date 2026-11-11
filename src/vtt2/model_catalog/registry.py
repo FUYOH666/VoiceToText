@@ -43,6 +43,9 @@ class ModelSpec:
     languages: str = ""
     note: str = ""
     verified_revision: Optional[str] = None
+    # Whisper's built-in speech → English translation works well (large-v3, small);
+    # turbo was trained for transcription only.
+    translates: bool = False
     custom: bool = False
 
     def to_dict(self) -> dict[str, Any]:

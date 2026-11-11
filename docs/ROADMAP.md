@@ -4,6 +4,19 @@ VoiceToText is local dictation for Apple Silicon: press Option+Space, speak, and
 
 This document records an engineering review of the `mlx-v1.1` line at commit `42a05f8` and the plan for turning it into a product that ordinary Mac users can install and trust. File and line references point at that commit; the fixes are tracked in the stages below.
 
+## Status (v2.2.0, 2026-11-11)
+
+| Stage | Status | Where |
+|---|---|---|
+| 0. Repository hygiene | Done: `mlx-v1.1` became `main`, old lines archived as tags, CI, single version source, macOS 13 build | #1, #3 |
+| 1. Reliability | Done: server fixes (1a), inference worker and error contract (1b), client never loses a dictation (1c), Whisper anti-loop | #2, #4, #5, #6 |
+| 2. Model registry and choice | Done: catalog of quantized models with memory tiers, picker API, «Модель ▸» menu, custom Hugging Face repos | #7, #8 |
+| 3. Dictation UX | Partly: push-to-talk, glossary of terms, history, Esc, sounds, status icons, English translation. Open: settings window, recording HUD with level meter, permission onboarding, removing the legacy rumps UI | #9, #11, v2.2.0 |
+| 4. Distribution without a Developer ID | Partly: one-command installer that builds locally (4a). Open: prebuilt signed releases from CI, DMG, in-app updates | #10 |
+| 5. Later | Open: streaming, Silero VAD, diarization, optional «готовое сообщение» via the user's own local LLM | — |
+
+Scorecard after v2.2.0 (was 20/40): quality 4.5, reliability 4, dictation UX 3.5, model choice 4, installation 3.5, code and tests 4, repository 4, privacy 4.5 — about 32/40.
+
 ## How it works today
 
 - **Swift menu bar app** (`macos/VoiceToText`): global hotkey, 16 kHz recording, WAV encoding, HTTP request, paste through the clipboard and Cmd+V.

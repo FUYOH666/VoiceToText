@@ -10,6 +10,8 @@ public enum STTClientError: Error, Equatable, Sendable {
     case cancelled
     /// The server stayed busy or kept loading past the retry budget.
     case gaveUp(Int)
+    /// Translation was asked of a model that can't translate (Qwen, Whisper turbo).
+    case translationUnsupported(String)
 
     /// Short Russian text for the menu status line.
     public var userMessage: String {
@@ -25,6 +27,7 @@ public enum STTClientError: Error, Equatable, Sendable {
         case .invalidResponse: return "Непонятный ответ сервера"
         case .cancelled: return "Отменено"
         case .gaveUp: return "Сервер занят, попробуйте ещё раз"
+        case .translationUnsupported: return "Перевод умеет Whisper large-v3 — выберите его в меню «Модель»"
         }
     }
 }
@@ -80,6 +83,7 @@ public struct STTClient: Sendable {
     public static let maxRetryWait: TimeInterval = 180
     /// /healthz must answer fast; a hung server should not freeze the hotkey.
     public static let probeTimeout: TimeInterval = 3
+    public static let translationsPath = "/v1/audio/translations"
 
     public init(
         config: AppConfig,
@@ -114,11 +118,12 @@ public struct STTClient: Sendable {
     /// as soon as the surrounding Task is cancelled.
     /// `prompt` (optional) goes out as the OpenAI `prompt` field: Whisper's initial
     /// prompt / Qwen's context. The app fills it from the user's glossary.
-    public func transcribe(wav: Data, prompt: String? = nil) async throws -> String {
+    /// `translate` sends the audio to `/v1/audio/translations` (speech → English).
+    public func transcribe(wav: Data, prompt: String? = nil, translate: Bool = false) async throws -> String {
         try checkCancelled()
         _ = try await health()
 
-        let url = endpoint(config.path)
+        let url = endpoint(translate ? Self.translationsPath : config.path)
         let deadline = Date().addingTimeInterval(min(config.warmupWaitSeconds, Self.maxRetryWait))
         var attempt = 0
 
@@ -151,6 +156,9 @@ public struct STTClient: Sendable {
                 await sleeper(wait)
             case .fail:
                 AppLog.error("STT \(http.statusCode) \(code ?? ""): \(message.prefix(200))")
+                if code == "translation_unsupported" {
+                    throw STTClientError.translationUnsupported(String(message.prefix(200)))
+                }
                 throw STTClientError.httpStatus(http.statusCode, String(message.prefix(200)))
             }
         }
