@@ -26,7 +26,9 @@ final class AppState: ObservableObject {
         case idle, recording, processing
     }
 
-    /// Menu bar mark. Changes with the phase so recording is visible at a glance.
+    /// Menu bar mark. Stays `waveform` while recording: macOS already shows its orange
+    /// microphone indicator then, and a second recording mark looked like a duplicate.
+    /// It changes only for processing and errors, which the system does not show.
     @Published var menuSymbol: String = AppState.idleSymbol
     @Published var status: String = "Готов"
     @Published var lastText: String = ""
@@ -41,7 +43,6 @@ final class AppState: ObservableObject {
     }
 
     static let idleSymbol = "waveform"
-    static let recordingSymbol = "record.circle"
     static let processingSymbol = "hourglass"
     static let errorSymbol = "exclamationmark.triangle"
     /// A forgotten recording stops itself here instead of growing past the server limit.
@@ -242,7 +243,7 @@ final class AppState: ObservableObject {
             return
         }
         phase = .recording
-        menuSymbol = Self.recordingSymbol
+        menuSymbol = Self.idleSymbol
         status = "Запись… (Esc — отмена)"
         hotkey.setEscapeActive(true)
         Sounds.play(.start, enabled: soundsEnabled)
