@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest an improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [docs/ROADMAP.md](https://github.com/FUYOH666/VoiceToText/blob/HEAD/docs/ROADMAP.md) first. Your idea may already be planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Area
+      options:
+        - Dictation UX (hotkey, paste, sounds, history)
+        - Models (new model, Hugging Face repo, languages)
+        - Transcription quality
+        - HTTP API / agents
+        - Install / distribution
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Hugging Face model (if this is a model request)
+      placeholder: mlx-community/whisper-large-v3-turbo

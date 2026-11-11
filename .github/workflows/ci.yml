@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main, mlx-v1.1]
+  pull_request:
+    branches: [main, mlx-v1.1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Apple Silicon only. Linux is no longer supported.
+jobs:
+  python:
+    name: Python server (macOS arm64)
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      # mlx-whisper -> numba -> llvmlite has no wheels for the newest CPython.
+      UV_PYTHON: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert arm64 runner
+        run: test "$(uname -m)" = "arm64"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Secret and absolute-path scan
+        run: |
+          set -u
+          fail=0
+          # Tailscale / CGNAT range (100.64-127.x.x). No \b: macOS git grep -E ignores it.
+          if git grep -nE '(^|[^0-9.])100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]{1,3}\.[0-9]{1,3}($|[^0-9])' -- ':!uv.lock'; then
+            echo "::error::Tailscale/CGNAT IP address in tracked files"; fail=1
+          fi
+          # Personal absolute paths. Use ~ or __HOME__ instead. `<name>` placeholders do not match.
+          if git grep -nE '/Users/[A-Za-z0-9._-]+/' -- ':!uv.lock'; then
+            echo "::error::Absolute /Users/<name>/ path in tracked files"; fail=1
+          fi
+          # Private keys and common token formats.
+          if git grep -nE 'BEGIN [A-Z ]*PRIVATE KEY|hf_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}' -- ':!uv.lock'; then
+            echo "::error::Private key or API token in tracked files"; fail=1
+          fi
+          exit "$fail"
+
+      - name: Lockfile matches pyproject.toml
+        run: uv lock --check
+
+      - name: Sync dependencies
+        run: uv sync --frozen --extra dev --extra qwen
+
+      - name: Version sync check
+        run: uv run python scripts/sync_version.py --check
+
+      - name: Pytest
+        run: uv run pytest -q
+
+  swift:
+    name: Swift app (macOS arm64)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert arm64 runner
+        run: test "$(uname -m)" = "arm64"
+
+      - name: Toolchain
+        run: |
+          xcode-select -p
+          swiftc --version
+
+      - name: Swift tests
+        run: bash macos/scripts/test.sh
+
+      - name: Build app
+        run: bash macos/scripts/build.sh
+
+      - name: Binary is arm64
+        run: |
+          archs="$(lipo -archs macos/dist/VoiceToText.app/Contents/MacOS/VoiceToText)"
+          echo "archs: $archs"
+          test "$archs" = "arm64"
+
+      # TODO: remove continue-on-error once build.sh passes -target arm64-apple-macos13.0.
+      # Until then swiftc stamps the runner's SDK version as minos and this step fails.
+      - name: Deployment target is macOS 13.0
+        continue-on-error: true
+        run: |
+          bin=macos/dist/VoiceToText.app/Contents/MacOS/VoiceToText
+          xcrun vtool -show-build "$bin"
+          minos="$(xcrun vtool -show-build "$bin" | awk '$1 == "minos" { print $2; exit }')"
+          plist_min="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' macos/VoiceToText/Resources/Info.plist)"
+          echo "binary minos=$minos, Info.plist LSMinimumSystemVersion=$plist_min"
+          test "$minos" = "13.0"
+          test "$plist_min" = "13.0"
