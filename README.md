@@ -24,9 +24,19 @@ Dictation stays Russian (`qwen3_asr.language: ru`). Agents override the language
 
 ---
 
-## Quick start
+## Install in one command
 
-Apple Silicon Mac, macOS 13+, [uv](https://docs.astral.sh/uv/).
+Apple Silicon Mac (M1 or newer), macOS 13+. Paste into Terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FUYOH666/VoiceToText/main/scripts/install.sh | bash
+```
+
+The installer builds everything on your Mac from source, so no Developer ID or notarization is involved and Gatekeeper has nothing to block. It checks the Mac (asks for Xcode Command Line Tools if missing), installs [uv](https://docs.astral.sh/uv/) if needed, puts the source in `~/.voicetotext`, builds and signs `VoiceToText.app` with a local identity (macOS asks once to trust it, so permissions survive updates), downloads the speech model recommended for your Mac's memory, starts the services and adds the app to `~/Applications`. Run the same command again to update. Remove: `bash ~/.voicetotext/scripts/uninstall.sh` (add `--purge` to delete history and settings too).
+
+Options go after `bash -s --`, e.g. `… | bash -s -- --model whisper-large-v3-turbo-8bit`. `--dry-run` prints the steps; `--no-model` skips the download. See the models: `cd ~/.voicetotext && uv run python scripts/prefetch_model.py --list`.
+
+### From a clone (developers)
 
 ```bash
 git clone https://github.com/FUYOH666/VoiceToText.git
@@ -36,7 +46,7 @@ macos/scripts/build.sh
 uv run python src/vtt2/main.py --install
 ```
 
-That starts two LaunchAgents: `ai.vtt2.stt` (model + HTTP on `127.0.0.1:8765`) and `ai.vtt2` (Swift `VoiceToText.app`).
+Either way you get two LaunchAgents: `ai.vtt2.stt` (model + HTTP on `127.0.0.1:8765`) and `ai.vtt2` (Swift `VoiceToText.app`).
 
 Grant **Microphone** and **Accessibility** to **VoiceToText** — not Terminal, not python. Input Monitoring is not needed.
 
