@@ -120,13 +120,14 @@ Also: `GET /v1/models` (catalog, recommendations, download and switch), interact
 
 ```mermaid
 flowchart LR
-    K["⌥ Space"] --> A["VoiceToText.app<br/>menu bar · Swift"]
-    A -- "WAV" --> S["Local STT server<br/>127.0.0.1:8765"]
-    S --> M[("MLX model<br/>Qwen3-ASR or Whisper")]
-    M -- "text" --> S
-    S -- "text" --> A
-    A -- "paste" --> T["Your app"]
-    G["Scripts and AI agents"] -- "OpenAI audio API" --> S
+    subgraph mac["Your Mac · nothing leaves it"]
+        direction LR
+        K["⌥ Space"] --> A["VoiceToText.app<br/>menu bar"]
+        A <-->|"audio → text"| S["STT server<br/>127.0.0.1:8765"]
+        S <--> M[("MLX model<br/>Qwen3-ASR · Whisper")]
+        A -->|"paste"| P["Your app,<br/>at the cursor"]
+        G["Scripts and<br/>AI agents"] -->|"OpenAI audio API"| S
+    end
 ```
 
 - **The menu bar app** (Swift) records 16 kHz audio, saves it, sends it to the server and pastes the result through the clipboard.
