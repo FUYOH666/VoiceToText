@@ -38,7 +38,9 @@ uv run python src/vtt2/main.py --install
 
 That starts two LaunchAgents: `ai.vtt2.stt` (model + HTTP on `127.0.0.1:8765`) and `ai.vtt2` (Swift `VoiceToText.app`).
 
-Grant **Microphone**, **Accessibility**, and **Input Monitoring** to **VoiceToText** — not Terminal, not python.
+Grant **Microphone** and **Accessibility** to **VoiceToText** — not Terminal, not python. Input Monitoring is not needed.
+
+Option+Space starts and stops a dictation; Esc cancels it. Every recording is saved to `~/Library/Application Support/VoiceToText/recordings/` before it is sent (last 50, 7 days), so nothing is lost if the server fails: menu «Повторить последнюю запись» or «История». Your clipboard is restored after the paste, and nothing is pasted into password fields.
 
 After an ad-hoc rebuild, macOS treats the binary as a new app: remove the old VoiceToText row in Privacy, add `macos/dist/VoiceToText.app` again, turn the toggles on.
 
@@ -107,7 +109,7 @@ Whisper stays in the menu. That item rewrites `stt_server.engine` and restarts o
 
 ## Troubleshooting
 
-**Paste does nothing:** Privacy → Accessibility and Input Monitoring → **VoiceToText**. Text is also on the clipboard (Cmd+V). Menu: «Разрешения…».
+**Paste does nothing:** Privacy → Accessibility → **VoiceToText**. Without that grant the text is left on the clipboard (Cmd+V) and the status line says so. Menu: «Разрешения…».
 
 Daily builds sign with the login-keychain identity `vtt-local-codesign`, so those two grants survive the next rebuild. Create it once: `macos/scripts/setup-local-signing.sh`. The first rebuild after an ad-hoc signature still needs one grant. Without that identity, `build.sh` signs ad-hoc and macOS drops the grants every time.
 

@@ -3,15 +3,83 @@ import Foundation
 public enum STTClientError: Error, Equatable, Sendable {
     case unreachable(String)
     case healthFailed(Int)
+    /// Non-retryable server answer: status and the server's message.
     case httpStatus(Int, String)
     case timeout
     case invalidResponse
+    case cancelled
+    /// The server stayed busy or kept loading past the retry budget.
+    case gaveUp(Int)
+
+    /// Short Russian text for the menu status line.
+    public var userMessage: String {
+        switch self {
+        case .unreachable: return "Сервер распознавания не запущен"
+        case .healthFailed(let code): return "Сервер распознавания не отвечает (\(code))"
+        case .httpStatus(400, _): return "Не удалось прочитать запись"
+        case .httpStatus(413, _): return "Запись слишком длинная"
+        case .httpStatus(500, _): return "Модель не загрузилась"
+        case .httpStatus(504, _): return "Распознавание заняло слишком долго"
+        case .httpStatus(let code, _): return "Ошибка сервера (\(code))"
+        case .timeout: return "Сервер не ответил вовремя"
+        case .invalidResponse: return "Непонятный ответ сервера"
+        case .cancelled: return "Отменено"
+        case .gaveUp: return "Сервер занят, попробуйте ещё раз"
+        }
+    }
+}
+
+/// How the client treats a non-200 answer. Mirrors docs/STT_API.md.
+public enum RetryDecision: Equatable, Sendable {
+    case retry(after: TimeInterval)
+    case fail
+}
+
+public enum RetryPolicy {
+    /// 429 busy: honour Retry-After. 503: only while the model is loading.
+    /// Everything else (400, 413, 500 load failed, 504 timeout) fails at once.
+    public static func decide(
+        status: Int,
+        errorCode: String?,
+        retryAfter: String?,
+        serverSaysLoading: Bool
+    ) -> RetryDecision {
+        switch status {
+        case 429:
+            let seconds = retryAfter.flatMap { TimeInterval($0.trimmingCharacters(in: .whitespaces)) } ?? 2
+            return .retry(after: min(max(seconds, 0.5), 10))
+        case 503 where errorCode == "model_loading" || (errorCode == nil && serverSaysLoading):
+            return .retry(after: 1.5)
+        default:
+            return .fail
+        }
+    }
+
+    /// `{"error": {"message", "code"}}` (current server) or `{"detail": ...}` (older).
+    public static func parseError(_ data: Data) -> (code: String?, message: String) {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (nil, String(data: data, encoding: .utf8).map { String($0.prefix(200)) } ?? "")
+        }
+        if let error = object["error"] as? [String: Any] {
+            return (error["code"] as? String, (error["message"] as? String) ?? "")
+        }
+        if let detail = object["detail"] as? String {
+            return (nil, detail)
+        }
+        return (nil, "")
+    }
 }
 
 public struct STTClient: Sendable {
     public let config: AppConfig
     private let session: URLSession
+    private let probeSession: URLSession
     private let sleeper: @Sendable (TimeInterval) async -> Void
+
+    /// Give up on 429/503-loading after this long. Never the 10+ minute lockups of old.
+    public static let maxRetryWait: TimeInterval = 180
+    /// /healthz must answer fast; a hung server should not freeze the hotkey.
+    public static let probeTimeout: TimeInterval = 3
 
     public init(
         config: AppConfig,
@@ -21,11 +89,16 @@ public struct STTClient: Sendable {
         self.config = config
         if let session {
             self.session = session
+            self.probeSession = session
         } else {
             let sessionConfig = URLSessionConfiguration.ephemeral
             sessionConfig.timeoutIntervalForRequest = config.timeoutSeconds
-            sessionConfig.timeoutIntervalForResource = config.timeoutSeconds + config.warmupWaitSeconds
+            sessionConfig.timeoutIntervalForResource = config.timeoutSeconds + Self.maxRetryWait
             self.session = URLSession(configuration: sessionConfig)
+            let probeConfig = URLSessionConfiguration.ephemeral
+            probeConfig.timeoutIntervalForRequest = Self.probeTimeout
+            probeConfig.timeoutIntervalForResource = Self.probeTimeout
+            self.probeSession = URLSession(configuration: probeConfig)
         }
         self.sleeper = sleeper ?? { seconds in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
@@ -33,98 +106,113 @@ public struct STTClient: Sendable {
     }
 
     public func healthOK() async throws -> Bool {
+        _ = try await health()
+        return true
+    }
+
+    /// Transcribe WAV. Retries only what the server marks as temporary, and stops
+    /// as soon as the surrounding Task is cancelled.
+    public func transcribe(wav: Data) async throws -> String {
+        try checkCancelled()
+        _ = try await health()
+
+        let url = endpoint(config.path)
+        let deadline = Date().addingTimeInterval(min(config.warmupWaitSeconds, Self.maxRetryWait))
+        var attempt = 0
+
+        while true {
+            try checkCancelled()
+            attempt += 1
+            let request = try multipartRequest(url: url, wav: wav)
+            let (data, http) = try await send(request)
+            if http.statusCode == 200 {
+                return try Self.parseText(data)
+            }
+            let (code, message) = RetryPolicy.parseError(data)
+            var loading = false
+            if http.statusCode == 503, code == nil {
+                loading = (try? await health())?["loading"] as? Bool ?? false
+            }
+            let decision = RetryPolicy.decide(
+                status: http.statusCode,
+                errorCode: code,
+                retryAfter: http.value(forHTTPHeaderField: "Retry-After"),
+                serverSaysLoading: loading
+            )
+            switch decision {
+            case .retry(let wait):
+                guard Date().addingTimeInterval(wait) < deadline else {
+                    AppLog.warning("STT \(http.statusCode) still after retries; giving up")
+                    throw STTClientError.gaveUp(http.statusCode)
+                }
+                AppLog.info("STT \(http.statusCode) \(code ?? "") attempt=\(attempt); retry in \(wait)s")
+                await sleeper(wait)
+            case .fail:
+                AppLog.error("STT \(http.statusCode) \(code ?? ""): \(message.prefix(200))")
+                throw STTClientError.httpStatus(http.statusCode, String(message.prefix(200)))
+            }
+        }
+    }
+
+    // MARK: - Transport
+
+    @discardableResult
+    private func health() async throws -> [String: Any] {
         let url = endpoint("healthz")
-        let (data, response) = try await data(from: url)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await probeSession.data(from: url)
+        } catch {
+            throw mapTransport(error, unreachableHint: true)
+        }
         guard let http = response as? HTTPURLResponse else {
             throw STTClientError.invalidResponse
         }
         if http.statusCode != 200 {
             throw STTClientError.healthFailed(http.statusCode)
         }
-        _ = data
-        return true
+        return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }
 
-    /// Transcribe WAV. `readyz` 503 is OK (idle unload). POST retries 503 until warmup deadline.
-    public func transcribe(wav: Data) async throws -> String {
-        try await assertProcessUp()
-
-        let readyURL = endpoint("readyz")
-        if let (_, response) = try? await data(from: readyURL),
-           let http = response as? HTTPURLResponse,
-           http.statusCode != 200
-        {
-            AppLog.info("readyz=\(http.statusCode) — POST will load on demand")
-        }
-
-        let url = endpoint(config.path)
-        let deadline = Date().addingTimeInterval(config.warmupWaitSeconds + config.timeoutSeconds)
-        var attempt = 0
-
-        while true {
-            attempt += 1
-            let request = try multipartRequest(url: url, wav: wav)
-            do {
-                let (data, response) = try await session.data(for: request)
-                guard let http = response as? HTTPURLResponse else {
-                    throw STTClientError.invalidResponse
-                }
-                if http.statusCode == 200 {
-                    return try Self.parseText(data)
-                }
-                if http.statusCode == 503, Date() < deadline {
-                    let detail = String(data: data, encoding: .utf8) ?? ""
-                    AppLog.info("STT 503 (warmup/busy) attempt=\(attempt): \(detail.prefix(200))")
-                    await sleeper(2)
-                    continue
-                }
-                let body = String(data: data, encoding: .utf8) ?? ""
-                throw STTClientError.httpStatus(http.statusCode, String(body.prefix(200)))
-            } catch let error as STTClientError {
-                throw error
-            } catch let error as URLError where error.code == .timedOut {
-                throw STTClientError.timeout
-            } catch {
-                throw STTClientError.unreachable(error.localizedDescription)
-            }
-        }
-    }
-
-    private func assertProcessUp() async throws {
-        let url = endpoint("healthz")
+    private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         do {
-            let (_, response) = try await data(from: url)
+            let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 throw STTClientError.invalidResponse
             }
-            if http.statusCode != 200 {
-                throw STTClientError.healthFailed(http.statusCode)
-            }
+            return (data, http)
         } catch let error as STTClientError {
             throw error
         } catch {
-            throw STTClientError.unreachable(
-                "Cannot reach local STT (\(config.baseURL.absoluteString)): \(error.localizedDescription). Start ai.vtt2.stt."
+            throw mapTransport(error, unreachableHint: false)
+        }
+    }
+
+    private func mapTransport(_ error: Error, unreachableHint: Bool) -> STTClientError {
+        if error is CancellationError { return .cancelled }
+        if let urlError = error as? URLError {
+            if urlError.code == .cancelled { return .cancelled }
+            if urlError.code == .timedOut { return .timeout }
+        }
+        if let clientError = error as? STTClientError { return clientError }
+        let detail = error.localizedDescription
+        if unreachableHint {
+            return .unreachable(
+                "Cannot reach local STT (\(config.baseURL.absoluteString)): \(detail). Start ai.vtt2.stt."
             )
         }
+        return .unreachable(detail)
+    }
+
+    private func checkCancelled() throws {
+        if Task.isCancelled { throw STTClientError.cancelled }
     }
 
     private func endpoint(_ relative: String) -> URL {
         let trimmed = relative.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return trimmed.split(separator: "/").reduce(config.baseURL) { url, part in
             url.appendingPathComponent(String(part))
-        }
-    }
-
-    private func data(from url: URL) async throws -> (Data, URLResponse) {
-        do {
-            return try await session.data(from: url)
-        } catch let error as URLError where error.code == .timedOut {
-            throw STTClientError.timeout
-        } catch let error as STTClientError {
-            throw error
-        } catch {
-            throw STTClientError.unreachable(error.localizedDescription)
         }
     }
 

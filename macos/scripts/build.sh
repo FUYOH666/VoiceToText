@@ -23,6 +23,8 @@ swiftc -parse-as-library \
   "$PKG/Sources/VoiceToTextCore/EngineSwitch.swift" \
   "$PKG/Sources/VoiceToTextCore/STTClient.swift" \
   "$PKG/Sources/VoiceToTextCore/WAVEncoder.swift" \
+  "$PKG/Sources/VoiceToTextCore/DictationStore.swift" \
+  "$PKG/Sources/VoiceToTextCore/ClipboardSnapshot.swift" \
   "$PKG/Sources/VoiceToText/HotkeyController.swift" \
   "$PKG/Sources/VoiceToText/Recorder.swift" \
   "$PKG/Sources/VoiceToText/Paster.swift" \

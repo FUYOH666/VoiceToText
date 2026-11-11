@@ -14,10 +14,19 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
         lock.withLock { _requests }
     }
 
+    private static var _headers: [String: String] = [:]
+
+    /// Extra response headers (e.g. Retry-After) for every response.
+    static var headers: [String: String] {
+        get { lock.withLock { _headers } }
+        set { lock.withLock { _headers = newValue } }
+    }
+
     static func reset() {
         lock.withLock {
             _handler = nil
             _requests = []
+            _headers = [:]
         }
     }
 
@@ -37,7 +46,7 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
                 url: current.url ?? URL(string: "http://127.0.0.1/invalid")!,
                 statusCode: status,
                 httpVersion: "HTTP/1.1",
-                headerFields: ["Content-Type": "application/json"]
+                headerFields: ["Content-Type": "application/json"].merging(Self.headers) { $1 }
             )!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)

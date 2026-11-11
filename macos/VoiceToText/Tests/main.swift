@@ -9,6 +9,8 @@ runAppConfigTests()
 runWAVEncoderTests()
 runEngineSwitchTests()
 runLiveShapedSwitchTests()
+runDictationStoreTests()
+runClipboardTests()
 let sem = DispatchSemaphore(value: 0)
 Task {
     await runSTTClientTests()
