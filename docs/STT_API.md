@@ -40,6 +40,34 @@ uv run python src/vtt2/main.py --install
 | `GET` | `/healthz` | Process alive (`200`). Includes `ready`, `loading`, `last_error`, `active_jobs`, `queued`, `idle_unload_seconds` |
 | `GET` | `/readyz` | Model loaded (`200`); else `503` (idle / not yet loaded / loading) |
 | `POST` | `/v1/audio/transcriptions` | Transcribe; **loads model on demand** if unloaded |
+| `GET` | `/v1/models` | Model catalog: installed, active, recommended for this Mac's memory |
+| `POST` | `/v1/models/{id}/download` | Start a background download (`202`); dictation keeps working |
+| `GET` | `/v1/models/{id}/download` | Download progress |
+| `POST` | `/v1/models/{id}/activate` | Switch the loaded model; persisted in user settings |
+| `DELETE` | `/v1/models/{id}` | Remove the model from the Hugging Face cache |
+| `POST` | `/v1/models/custom` | `{"repo": "org/name"}`: check a Hugging Face repo and add it to the list |
+
+### Models
+
+The catalog lives in `src/vtt2/model_catalog/catalog.yaml`: quantized MLX checkpoints first (Qwen3-ASR 1.7B/0.6B 8-bit, Whisper large-v3 / turbo in 8-bit and 4-bit, fp16 for maximum quality, Whisper small as the minimum). Each entry has its download size, approximate memory while loaded (`ram_gb`; unified memory on a Mac) and `min_memory_gb`.
+
+`GET /v1/models` returns `{"object": "list", "data": [...], "system_memory_gb", "recommended", "active"}`. Each model has `id, title, family, repo, quantization, download_gb, ram_gb, min_memory_gb, languages, note, installed, active, recommended, fits_memory, custom`, plus `download` while one is running. `recommended` follows the rules at the top of the catalog (16 GB and more → Qwen3-ASR 1.7B 8-bit, less → 0.6B 8-bit). A model set by hand in `config.yaml` that is not in the catalog shows up as `id: "configured"`.
+
+Download progress: `{"model", "state": "idle|queued|downloading|done|error", "bytes_done", "bytes_total", "progress", "error"}`.
+
+Activation runs on the inference worker, so it waits for a running transcription instead of interrupting it. It writes only the selection keys (`stt_server.engine`, `transcription.<family>.model_name`) to `~/Library/Application Support/VoiceToText/config.yaml`, which is layered over the repo `config.yaml` (env `VTT2_*` still wins; `VTT2_USER_DIR` moves the folder). If the new model fails to load, the previous selection stays and nothing is written.
+
+Custom models: MLX Whisper checkpoints (config with `n_mels`/`n_audio_ctx`, as in `mlx-community/whisper-*`) and Qwen3-ASR checkpoints are accepted; anything else is `422 unsupported_model`. They are saved to `models.yaml` next to the user settings with `custom: true`.
+
+| Status | `code` | When |
+|--------|--------|------|
+| `404` | `model_not_found` | Unknown id, or the Hugging Face repo does not exist |
+| `409` | `model_not_installed` | Activate before downloading |
+| `409` | `model_downloading` | Activate or delete while it downloads |
+| `409` | `model_active` | Delete the model that is in use |
+| `422` | `unsupported_model` | Custom repo is not an MLX Whisper / Qwen3-ASR checkpoint |
+| `429` | `busy` | Switching while the queue is full |
+| `500` | `model_load_failed` | The new model did not load; the previous one stays selected |
 
 ### Transcription
 

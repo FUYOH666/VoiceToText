@@ -1,0 +1,114 @@
+# Curated speech-to-text models for the model picker (GET /v1/models).
+#
+# Quantized variants first: they are plenty for everyday dictation and let Macs
+# with less memory run the tool. download_gb is the weights download; ram_gb is
+# the approximate resident memory while loaded. On Apple Silicon that is unified
+# memory shared with macOS and your apps (on a GPU box it would be VRAM).
+# min_memory_gb: below this much installed RAM the model is marked as not fitting.
+# verified_revision: the Hugging Face commit checked when the entry was added.
+#
+# Families: qwen3_asr (mlx-qwen3-asr) and mlx_whisper (mlx-whisper).
+
+# First rule whose min_memory_gb <= installed RAM picks the recommended model.
+recommended:
+  - min_memory_gb: 16
+    model: qwen3-asr-1.7b-8bit
+  - min_memory_gb: 0
+    model: qwen3-asr-0.6b-8bit
+
+models:
+  - id: qwen3-asr-1.7b-8bit
+    title: "Qwen3-ASR 1.7B · 8-bit"
+    family: qwen3_asr
+    repo: moona3k/mlx-qwen3-asr-1.7b-8bit
+    verified_revision: 22c8abe6a6772122dda5905967d7496d1d3e8dd2
+    quantization: 8bit
+    download_gb: 2.17
+    ram_gb: 2.7
+    min_memory_gb: 8
+    languages: "30 языков, включая русский и английский"
+    note: "Лучший баланс для русского с английскими терминами, с пунктуацией"
+
+  - id: qwen3-asr-0.6b-8bit
+    title: "Qwen3-ASR 0.6B · 8-bit"
+    family: qwen3_asr
+    repo: moona3k/mlx-qwen3-asr-0.6b-8bit
+    verified_revision: 83ce2a8ef9a382d2ba2209aab383bc51fff366f5
+    quantization: 8bit
+    download_gb: 0.84
+    ram_gb: 1.2
+    min_memory_gb: 8
+    languages: "30 языков, включая русский и английский"
+    note: "Лёгкая: для Mac с 8 ГБ. На русском ошибок заметно больше, чем у 1.7B"
+
+  - id: whisper-large-v3-turbo-8bit
+    title: "Whisper large-v3 turbo · 8-bit"
+    family: mlx_whisper
+    repo: mlx-community/whisper-large-v3-turbo-8bit
+    verified_revision: 62103fc276a35fdc76e318f314d8ff47987fba89
+    quantization: 8bit
+    download_gb: 0.86
+    ram_gb: 1.3
+    min_memory_gb: 8
+    languages: "99 языков"
+    note: "Быстрая и лёгкая; на коротких шумных записях чаще ошибается, чем large-v3"
+
+  - id: whisper-large-v3-turbo-4bit
+    title: "Whisper large-v3 turbo · 4-bit"
+    family: mlx_whisper
+    repo: mlx-community/whisper-large-v3-turbo-4bit
+    verified_revision: 0f058d38170d183f9fdee07908f5b515d91793a8
+    quantization: 4bit
+    download_gb: 0.46
+    ram_gb: 0.9
+    min_memory_gb: 8
+    languages: "99 языков"
+    note: "Самая лёгкая из больших; качество ниже 8-bit"
+
+  - id: whisper-large-v3-turbo
+    title: "Whisper large-v3 turbo"
+    family: mlx_whisper
+    repo: mlx-community/whisper-large-v3-turbo
+    verified_revision: a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb
+    quantization: fp16
+    download_gb: 1.61
+    ram_gb: 2.1
+    min_memory_gb: 8
+    languages: "99 языков"
+    note: "Быстрая, без квантования"
+
+  - id: whisper-large-v3-8bit
+    title: "Whisper large-v3 · 8-bit"
+    family: mlx_whisper
+    repo: mlx-community/whisper-large-v3-mlx-8bit
+    verified_revision: 04ca5b03c22d72ddf4f4b2d808a28bf9902fb71a
+    quantization: 8bit
+    download_gb: 1.71
+    ram_gb: 2.3
+    min_memory_gb: 16
+    languages: "99 языков"
+    note: "Почти качество полной large-v3 при вдвое меньшем объёме"
+
+  - id: whisper-large-v3
+    title: "Whisper large-v3"
+    family: mlx_whisper
+    repo: mlx-community/whisper-large-v3-mlx
+    verified_revision: 49e6aa286ad60c14352c404340ded53710378a11
+    quantization: fp16
+    download_gb: 3.08
+    ram_gb: 3.6
+    min_memory_gb: 16
+    languages: "99 языков"
+    note: "Максимум качества Whisper; самая тяжёлая"
+
+  - id: whisper-small
+    title: "Whisper small"
+    family: mlx_whisper
+    repo: mlx-community/whisper-small-mlx
+    verified_revision: 45f3915923c7a79a5a5b5a7d909d39aeb0e5630e
+    quantization: fp16
+    download_gb: 0.48
+    ram_gb: 0.7
+    min_memory_gb: 4
+    languages: "99 языков"
+    note: "Минимальные требования; на русском заметно хуже больших моделей"

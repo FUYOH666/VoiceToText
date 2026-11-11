@@ -15,7 +15,48 @@ logger = logging.getLogger(__name__)
 
 ENV_PREFIX = "VTT2_"
 # Variables with the prefix that are not config fields (VTT2_CONFIG: config path for the Swift app).
-_ENV_NON_CONFIG_KEYS = frozenset({"CONFIG"})
+_ENV_NON_CONFIG_KEYS = frozenset({"CONFIG", "USER_DIR", "USER_CONFIG"})
+
+
+def deep_merge(base: dict, overlay: dict) -> dict:
+    """``base`` with ``overlay`` merged in, recursively for nested dicts. Inputs are not modified."""
+    out = dict(base)
+    for key, value in (overlay or {}).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def user_overlay_path() -> Path:
+    """User settings written by the app, layered over the repo config.yaml.
+
+    ``VTT2_USER_CONFIG`` points at another file; ``VTT2_USER_DIR`` moves the
+    whole per-user folder (default ``~/Library/Application Support/VoiceToText``).
+    """
+    explicit = os.environ.get("VTT2_USER_CONFIG")
+    if explicit:
+        return Path(explicit).expanduser()
+    base = os.environ.get("VTT2_USER_DIR")
+    root = Path(base).expanduser() if base else Path.home() / "Library" / "Application Support" / "VoiceToText"
+    return root / "config.yaml"
+
+
+def _load_user_overlay() -> dict:
+    path = user_overlay_path()
+    if not path.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        logger.warning("Ignoring user settings %s: %s", path, exc)
+        return {}
+    if not isinstance(data, dict):
+        logger.warning("Ignoring user settings %s: not a mapping", path)
+        return {}
+    logger.info("User settings applied from %s", path)
+    return data
 
 
 def _model_class(annotation: Any) -> Optional[type[BaseModel]]:
@@ -405,8 +446,11 @@ class Config(BaseModel):
         
         if not config_data:
             raise ValueError("Конфигурационный файл пуст")
-        
-        # Применение ENV переопределений (приоритет выше YAML)
+
+        # Настройки пользователя (выбор модели из приложения) поверх repo config.yaml
+        config_data = deep_merge(config_data, _load_user_overlay())
+
+        # Применение ENV переопределений (приоритет выше YAML и настроек пользователя)
         config_data = cls._apply_env_overrides(config_data)
         
         # Разрешение относительных путей

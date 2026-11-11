@@ -10,6 +10,13 @@ import sys
 # Добавляем пакет vtt2 в путь для импортов (чтобы работали from config.loader, from utils.logger и т.д.)
 sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "vtt2"))
 
+@pytest.fixture(autouse=True)
+def _isolated_user_dir(tmp_path, monkeypatch):
+    """Never read or write the developer's real ~/Library/Application Support/VoiceToText."""
+    monkeypatch.setenv("VTT2_USER_DIR", str(tmp_path / "user"))
+    monkeypatch.delenv("VTT2_USER_CONFIG", raising=False)
+
+
 # Мокируем mlx_whisper модуль ДО импорта других модулей если он не установлен
 try:
     import mlx_whisper
