@@ -42,6 +42,7 @@ struct VoiceToTextApp: App {
                     Text("Память Mac: \(Int(memory.rounded())) ГБ · ★ рекомендуется")
                 }
             }
+            Button("Словарь терминов…") { state.openGlossary() }
             Divider()
             Button("Копировать текст") { state.copyLastText() }
             Button("Показать текст") { state.showLastText() }

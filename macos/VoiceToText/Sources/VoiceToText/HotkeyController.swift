@@ -9,6 +9,8 @@ import Foundation
 /// is recording or processing, so it never steals Esc from other apps otherwise.
 final class HotkeyController: @unchecked Sendable {
     var onPressed: (() -> Void)?
+    /// Option+Space let go (push-to-talk ends a held dictation).
+    var onReleased: (() -> Void)?
     var onEscape: (() -> Void)?
 
     private static let signature = OSType(0x56545431)  // "VTT1"
@@ -21,13 +23,13 @@ final class HotkeyController: @unchecked Sendable {
 
     func start() {
         stop()
-        var spec = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
+        var specs = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased)),
+        ]
         let userData = Unmanaged.passUnretained(self).toOpaque()
         let installed = InstallEventHandler(
-            GetEventDispatcherTarget(), hotKeyEventHandler, 1, &spec, userData, &handlerRef
+            GetEventDispatcherTarget(), hotKeyEventHandler, specs.count, &specs, userData, &handlerRef
         )
         if installed != noErr {
             AppLog.error("InstallEventHandler failed: \(installed)")
@@ -63,10 +65,11 @@ final class HotkeyController: @unchecked Sendable {
         }
     }
 
-    fileprivate func dispatch(id: UInt32) {
-        switch id {
-        case Self.mainID: onPressed?()
-        case Self.escapeID: onEscape?()
+    fileprivate func dispatch(id: UInt32, released: Bool) {
+        switch (id, released) {
+        case (Self.mainID, false): onPressed?()
+        case (Self.mainID, true): onReleased?()
+        case (Self.escapeID, false): onEscape?()
         default: break
         }
     }
@@ -106,8 +109,9 @@ private func hotKeyEventHandler(
     guard status == noErr else { return status }
     let controller = Unmanaged<HotkeyController>.fromOpaque(userData).takeUnretainedValue()
     let id = hotKeyID.id
+    let released = GetEventKind(event) == UInt32(kEventHotKeyReleased)
     DispatchQueue.main.async {
-        controller.dispatch(id: id)
+        controller.dispatch(id: id, released: released)
     }
     return noErr
 }

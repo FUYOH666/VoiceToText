@@ -21,6 +21,7 @@ swiftc -parse-as-library \
   "$PKG/Sources/VoiceToTextCore/AppLog.swift" \
   "$PKG/Sources/VoiceToTextCore/AppConfig.swift" \
   "$PKG/Sources/VoiceToTextCore/ModelsClient.swift" \
+  "$PKG/Sources/VoiceToTextCore/Glossary.swift" \
   "$PKG/Sources/VoiceToTextCore/STTClient.swift" \
   "$PKG/Sources/VoiceToTextCore/WAVEncoder.swift" \
   "$PKG/Sources/VoiceToTextCore/DictationStore.swift" \
